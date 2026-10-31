@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
@@ -196,6 +197,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             if (bodyEst > 39.5f) bodyEst = 39.5f;
             tvSkinTemp.setText(String.format(Locale.US, "%.1f °C", directSkinTemp));
             tvSkinStatus.setText(String.format(Locale.US, "Goodix • Тело ~%.1f °C", bodyEst));
+            savePrefsAndUpdateComplication(directSkinTemp, bodyEst, lastAmbientTemp);
             return;
         }
 
@@ -229,6 +231,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
                 } else {
                     tvSkinStatus.setText(String.format(Locale.US, "Запястье • Тело ~%.1f °C", bodyEst));
                 }
+                savePrefsAndUpdateComplication(wristSkin, bodyEst, lastAmbientTemp);
             } else {
                 // Watch is off wrist / cooling down
                 tvSkinTemp.setText(String.format(Locale.US, "%.1f °C", rawContact));
@@ -238,6 +241,20 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             tvSkinTemp.setText("Измерение...");
             tvSkinStatus.setText("Опрос термодатчиков часов");
         }
+    }
+
+    private void savePrefsAndUpdateComplication(float skinTemp, float bodyEst, float ambientTemp) {
+        try {
+            getSharedPreferences(ThermometerComplicationService.PREFS_NAME, Context.MODE_PRIVATE)
+                    .edit()
+                    .putFloat(ThermometerComplicationService.KEY_SKIN_TEMP, skinTemp)
+                    .putFloat(ThermometerComplicationService.KEY_BODY_EST, bodyEst)
+                    .putFloat(ThermometerComplicationService.KEY_AMBIENT_TEMP, ambientTemp)
+                    .putLong(ThermometerComplicationService.KEY_TIMESTAMP, System.currentTimeMillis())
+                    .apply();
+
+            ThermometerComplicationService.requestComplicationUpdate(this);
+        } catch (Exception ignored) {}
     }
 
     @Override

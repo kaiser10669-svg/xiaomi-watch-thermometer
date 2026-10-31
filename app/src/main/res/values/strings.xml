@@ -7,4 +7,6 @@
     <string name="waiting_sensor">Ожидание...</string>
     <string name="sensor_status">Датчик Goodix Skin Temp</string>
     <string name="btn_refresh">Обновить</string>
+    <string name="complication_label">Термометр</string>
+    <string name="complication_desc">Температура кожи и воздуха на циферблате</string>
 </resources>

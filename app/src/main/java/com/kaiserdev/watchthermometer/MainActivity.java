@@ -1046,9 +1046,10 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             String strType = s.getStringType() != null ? s.getStringType().toLowerCase(Locale.US) : "";
 
             if (type == Sensor.TYPE_LIGHT) continue;
+            if (type == 65590 || name.contains("skin temperature")) continue; // Handled directly via kernel sysfs sdm-skin-therm
 
             boolean isOffbody = type == 34 || name.contains("offbody") || strType.contains("offbody");
-            boolean isSkin = type == 65590 || name.contains("skin") || strType.contains("skin_temperature") || name.contains("body_temp");
+            boolean isSkin = name.contains("skin") || strType.contains("skin_temperature") || name.contains("body_temp");
             boolean isAmbient = type == Sensor.TYPE_AMBIENT_TEMPERATURE || type == 7 || (name.contains("ambient") && name.contains("temp")) || (name.contains("temp") && !name.contains("battery"));
             boolean isBaro = type == Sensor.TYPE_PRESSURE || name.contains("pressure") || name.contains("barometer");
             boolean isHeartRate = type == Sensor.TYPE_HEART_RATE || type == 21 || name.contains("heart_rate");
@@ -1953,6 +1954,10 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             btnToggleWarmer.setBackgroundResource(R.drawable.btn_measure_bg);
         }
 
+        if (tempAnimator != null && tempAnimator.isRunning()) {
+            tempAnimator.cancel();
+        }
+
         uiHandler.removeCallbacks(this);
         try {
             unregisterReceiver(batteryReceiver);
@@ -1968,6 +1973,9 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if (tempAnimator != null) {
+            tempAnimator.cancel();
+        }
         if (handWarmer.isRunning()) {
             handWarmer.stop();
         }

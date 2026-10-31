@@ -14,10 +14,10 @@
         android:gravity="center_horizontal"
         android:paddingTop="36dp"
         android:paddingBottom="48dp"
-        android:paddingLeft="20dp"
-        android:paddingRight="20dp">
+        android:paddingLeft="18dp"
+        android:paddingRight="18dp">
 
-        <!-- App Header with Unit Toggle -->
+        <!-- App Header with Voice & Unit Toggles -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -35,10 +35,21 @@
                 android:textStyle="bold"
                 android:letterSpacing="0.08" />
 
+            <!-- Voice Mute Toggle -->
+            <ImageButton
+                android:id="@+id/btnVoiceMute"
+                android:layout_width="28dp"
+                android:layout_height="24dp"
+                android:background="@drawable/tab_unselected_bg"
+                android:src="@drawable/ic_volume_up"
+                android:padding="3dp"
+                android:layout_marginEnd="6dp"
+                android:contentDescription="Голос" />
+
             <!-- Unit switch: °C / °F -->
             <Button
                 android:id="@+id/btnUnitToggle"
-                android:layout_width="44dp"
+                android:layout_width="38dp"
                 android:layout_height="24dp"
                 android:background="@drawable/tab_unselected_bg"
                 android:text="°C"
@@ -71,7 +82,7 @@
                 android:gravity="center" />
         </LinearLayout>
 
-        <!-- Mode Selector: На руке / Воздух -->
+        <!-- 3-Mode Selector: Рука / Висок / Воздух -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="28dp"
@@ -86,9 +97,21 @@
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:background="@drawable/tab_selected_bg"
-                android:text="👤 НА РУКЕ"
+                android:text="👤 РУКА"
                 android:textColor="#FFFFFF"
-                android:textSize="10sp"
+                android:textSize="9sp"
+                android:textStyle="bold"
+                android:padding="0dp" />
+
+            <Button
+                android:id="@+id/btnTabTemple"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@null"
+                android:text="🎯 ВИСОК"
+                android:textColor="@color/text_title"
+                android:textSize="9sp"
                 android:textStyle="bold"
                 android:padding="0dp" />
 
@@ -100,7 +123,7 @@
                 android:background="@null"
                 android:text="🏠 ВОЗДУХ"
                 android:textColor="@color/text_title"
-                android:textSize="10sp"
+                android:textSize="9sp"
                 android:textStyle="bold"
                 android:padding="0dp" />
         </LinearLayout>
@@ -236,14 +259,32 @@
                         android:letterSpacing="0.05"
                         android:layout_marginBottom="2dp" />
 
-                    <TextView
-                        android:id="@+id/tvFixedResult"
+                    <!-- Number + Voice Re-Speak Button -->
+                    <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="36.6 °C"
-                        android:textColor="@color/green_temp"
-                        android:textSize="26sp"
-                        android:textStyle="bold" />
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:id="@+id/tvFixedResult"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="36.6 °C"
+                            android:textColor="@color/green_temp"
+                            android:textSize="26sp"
+                            android:textStyle="bold" />
+
+                        <ImageButton
+                            android:id="@+id/btnSpeakResult"
+                            android:layout_width="28dp"
+                            android:layout_height="28dp"
+                            android:background="@drawable/btn_circle_bg"
+                            android:src="@drawable/ic_volume_up"
+                            android:layout_marginStart="8dp"
+                            android:padding="4dp"
+                            android:contentDescription="Озвучить" />
+                    </LinearLayout>
 
                     <TextView
                         android:id="@+id/tvResultBadge"
@@ -395,6 +436,164 @@
                     </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
+
+            <!-- Thermal Comfort Balance Card (Delta T = Skin - Ambient) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:background="@drawable/bg_card"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
+                android:paddingLeft="12dp"
+                android:paddingRight="12dp"
+                android:layout_marginBottom="8dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="ТЕПЛОВОЙ БАЛАНС (ΔT)"
+                    android:textColor="@color/cyan_temp"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.05"
+                    android:layout_marginBottom="2dp" />
+
+                <TextView
+                    android:id="@+id/tvDeltaT"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="+0.0 °C"
+                    android:textColor="@color/text_white"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvThermalStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🌿 Оптимальный тонус сосудов"
+                    android:textColor="@color/green_temp"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="2dp" />
+
+                <TextView
+                    android:id="@+id/tvThermalDesc"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Разница температур кожи и воздуха"
+                    android:textColor="@color/text_title"
+                    android:textSize="8sp"
+                    android:layout_marginTop="2dp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ==================== TEMPLE / FOREHEAD MODE CONTAINER ==================== -->
+        <LinearLayout
+            android:id="@+id/layoutTempleMode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:background="@drawable/bg_card"
+                android:paddingTop="12dp"
+                android:paddingBottom="14dp"
+                android:paddingLeft="12dp"
+                android:paddingRight="12dp"
+                android:layout_marginBottom="8dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🎯 ЗАМЕР НА ВИСКЕ / ЛБУ"
+                    android:textColor="@color/orange_temp"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.05"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:id="@+id/tvTempleTemp"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="--.- °C"
+                    android:textColor="@color/text_white"
+                    android:textSize="32sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvTempleStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Приложите тыльную сторону к виску"
+                    android:textColor="@color/text_title"
+                    android:textSize="10sp"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="8dp" />
+
+                <Button
+                    android:id="@+id/btnStartTempleMeasure"
+                    android:layout_width="match_parent"
+                    android:layout_height="34dp"
+                    android:background="@drawable/btn_measure_bg"
+                    android:text="⏱️ ЗАМЕР НА ВИСКЕ (15 сек)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:textAllCaps="false" />
+
+                <TextView
+                    android:id="@+id/tvTempleCountdown"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="15 сек... Держите у виска"
+                    android:textColor="@color/accent_orange"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="6dp"
+                    android:visibility="gone" />
+
+                <!-- Temple Result Layout -->
+                <LinearLayout
+                    android:id="@+id/layoutTempleResult"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:layout_marginTop="6dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/tvTempleFixedResult"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="36.6 °C"
+                        android:textColor="@color/green_temp"
+                        android:textSize="26sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvTempleResultBadge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/badge_bg"
+                        android:text="✓ Норма (Височная артерия)"
+                        android:textColor="@color/green_temp"
+                        android:textSize="9sp"
+                        android:textStyle="bold"
+                        android:padding="4dp"
+                        android:layout_marginTop="3dp"
+                        android:layout_marginBottom="6dp" />
+                </LinearLayout>
+            </LinearLayout>
         </LinearLayout>
 
         <!-- ==================== ROOM / AMBIENT MODE CONTAINER ==================== -->
@@ -467,6 +666,67 @@
                     android:textStyle="bold"
                     android:layout_marginTop="6dp"
                     android:visibility="gone" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ==================== HISTORY LOG CARD ==================== -->
+        <LinearLayout
+            android:id="@+id/layoutHistoryCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_card"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
+            android:paddingLeft="12dp"
+            android:paddingRight="12dp"
+            android:layout_marginBottom="8dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="6dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="ЖУРНАЛ ЗАМЕРОВ"
+                    android:textColor="@color/text_title"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.05" />
+
+                <Button
+                    android:id="@+id/btnClearHistory"
+                    android:layout_width="wrap_content"
+                    android:layout_height="22dp"
+                    android:background="@null"
+                    android:text="Очистить"
+                    android:textColor="#88FFFFFF"
+                    android:textSize="8sp"
+                    android:padding="0dp" />
+            </LinearLayout>
+
+            <!-- Dynamic list of entries -->
+            <LinearLayout
+                android:id="@+id/layoutHistoryList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tvHistoryEmpty"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="История пуста. Сделайте первый замер."
+                    android:textColor="#55FFFFFF"
+                    android:textSize="9sp"
+                    android:gravity="center"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp" />
             </LinearLayout>
         </LinearLayout>
 
@@ -570,7 +830,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="КАЛИБРОВКА СМЕЩЕНИЯ"
+                android:text="ТОЧНАЯ КАЛИБРОВКА"
                 android:textColor="@color/text_title"
                 android:textSize="10sp"
                 android:textStyle="bold"
@@ -621,7 +881,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Подстройка под личный градусник"
+                android:text="Смещение для подгонки под градусник"
                 android:textColor="@color/text_title"
                 android:textSize="9sp" />
         </LinearLayout>
@@ -631,7 +891,7 @@
             android:id="@+id/tvSensorList"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Xiaomi Watch 5 • Wear OS • v1.4.0"
+            android:text="Xiaomi Watch 5 • Wear OS • v2.0.0"
             android:textColor="@color/text_title"
             android:textSize="9sp"
             android:gravity="center" />

@@ -19,11 +19,14 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+import android.view.Gravity;
 import android.view.InputDevice;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.ImageButton;
+import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -42,14 +45,17 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     private static final String PREF_TEMP_OFFSET = "temp_offset";
 
     private ScrollView mainScrollView;
+    private ImageButton btnVoiceMute;
     private Button btnUnitToggle;
 
     private View layoutOverheat;
     private TextView tvOverheatMsg;
 
     private Button btnTabWrist;
+    private Button btnTabTemple;
     private Button btnTabRoom;
     private View layoutWristMode;
+    private View layoutTempleMode;
     private View layoutRoomMode;
 
     // Wrist Mode Views
@@ -63,6 +69,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     private View btnCancelMeasure;
     private View layoutMeasureResult;
     private TextView tvFixedResult;
+    private ImageButton btnSpeakResult;
     private TextView tvResultBadge;
     private View btnRepeatMeasure;
 
@@ -71,11 +78,30 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     private TextView tvStatAvg;
     private TextView tvStatMax;
 
+    // Thermal Balance Views
+    private TextView tvDeltaT;
+    private TextView tvThermalStatus;
+    private TextView tvThermalDesc;
+
+    // Temple Mode Views
+    private TextView tvTempleTemp;
+    private TextView tvTempleStatus;
+    private Button btnStartTempleMeasure;
+    private TextView tvTempleCountdown;
+    private View layoutTempleResult;
+    private TextView tvTempleFixedResult;
+    private TextView tvTempleResultBadge;
+
     // Room Mode Views
     private TextView tvRoomTemp;
     private TextView tvRoomStatus;
     private Button btnStartRoomMeasure;
     private TextView tvRoomCountdown;
+
+    // History Log Views
+    private LinearLayout layoutHistoryList;
+    private TextView tvHistoryEmpty;
+    private Button btnClearHistory;
 
     // Hardware Sensors
     private TextView tvAmbientTemp;
@@ -91,6 +117,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     private SensorManager sensorManager;
     private final List<Sensor> registeredSensors = new ArrayList<>();
     private BatteryReceiver batteryReceiver;
+    private VoiceAssistantManager voiceAssistant;
 
     private float directSkinTemp = -1.0f;
     private float lastAmbientTemp = -1.0f;
@@ -100,14 +127,23 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
     private boolean isFahrenheit = false;
     private float tempOffset = 0.0f;
-    private int currentMode = 0; // 0 = wrist, 1 = room
+    private int currentMode = 0; // 0 = wrist, 1 = temple, 2 = room
 
+    // Wrist Measurement State
     private boolean isMeasuring = false;
     private int measureSecondsLeft = 30;
     private final List<Float> measureSamples = new ArrayList<>();
+    private float lastMeasuredBodyWrist = 36.6f;
 
+    // Temple Measurement State
+    private boolean isTempleMeasuring = false;
+    private int templeSecondsLeft = 15;
+    private final List<Float> templeSamples = new ArrayList<>();
+    private float lastMeasuredBodyTemple = 36.6f;
+
+    // Room Measurement State
     private boolean isRoomMeasuring = false;
-    private int roomSecondsLeft = 120;
+    private int roomSecondsLeft = 60;
 
     private float currentCalculatedSkin = -1.0f;
     private float currentCalculatedBody = -1.0f;
@@ -118,6 +154,13 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         @Override
         public void run() {
             tickMeasure();
+        }
+    };
+
+    private final Runnable templeCountdownRunnable = new Runnable() {
+        @Override
+        public void run() {
+            tickTempleMeasure();
         }
     };
 
@@ -157,6 +200,8 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setContentView(R.layout.activity_main);
 
+        voiceAssistant = new VoiceAssistantManager(this);
+
         SharedPreferences prefs = getSharedPreferences(ThermometerComplicationService.PREFS_NAME, Context.MODE_PRIVATE);
         isFahrenheit = prefs.getBoolean(PREF_IS_FAHRENHEIT, false);
         tempOffset = prefs.getFloat(PREF_TEMP_OFFSET, 0.0f);
@@ -178,21 +223,27 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         pollThermalSources();
         updateOffsetView();
         updateUnitButton();
+        updateVoiceButton();
+        updateHistoryView();
         recalculateAndDisplay();
     }
 
     private void initViews() {
         mainScrollView = (ScrollView) findViewById(R.id.mainScrollView);
+        btnVoiceMute = (ImageButton) findViewById(R.id.btnVoiceMute);
         btnUnitToggle = (Button) findViewById(R.id.btnUnitToggle);
 
         layoutOverheat = findViewById(R.id.layoutOverheat);
         tvOverheatMsg = (TextView) findViewById(R.id.tvOverheatMsg);
 
         btnTabWrist = (Button) findViewById(R.id.btnTabWrist);
+        btnTabTemple = (Button) findViewById(R.id.btnTabTemple);
         btnTabRoom = (Button) findViewById(R.id.btnTabRoom);
         layoutWristMode = findViewById(R.id.layoutWristMode);
+        layoutTempleMode = findViewById(R.id.layoutTempleMode);
         layoutRoomMode = findViewById(R.id.layoutRoomMode);
 
+        // Wrist
         tvSkinTemp = (TextView) findViewById(R.id.tvSkinTemp);
         tvSkinStatus = (TextView) findViewById(R.id.tvSkinStatus);
         btnStartMeasure = findViewById(R.id.btnStartMeasure);
@@ -203,6 +254,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         btnCancelMeasure = findViewById(R.id.btnCancelMeasure);
         layoutMeasureResult = findViewById(R.id.layoutMeasureResult);
         tvFixedResult = (TextView) findViewById(R.id.tvFixedResult);
+        btnSpeakResult = (ImageButton) findViewById(R.id.btnSpeakResult);
         tvResultBadge = (TextView) findViewById(R.id.tvResultBadge);
         btnRepeatMeasure = findViewById(R.id.btnRepeatMeasure);
 
@@ -211,21 +263,54 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         tvStatAvg = (TextView) findViewById(R.id.tvStatAvg);
         tvStatMax = (TextView) findViewById(R.id.tvStatMax);
 
+        // Thermal Balance
+        tvDeltaT = (TextView) findViewById(R.id.tvDeltaT);
+        tvThermalStatus = (TextView) findViewById(R.id.tvThermalStatus);
+        tvThermalDesc = (TextView) findViewById(R.id.tvThermalDesc);
+
+        // Temple
+        tvTempleTemp = (TextView) findViewById(R.id.tvTempleTemp);
+        tvTempleStatus = (TextView) findViewById(R.id.tvTempleStatus);
+        btnStartTempleMeasure = (Button) findViewById(R.id.btnStartTempleMeasure);
+        tvTempleCountdown = (TextView) findViewById(R.id.tvTempleCountdown);
+        layoutTempleResult = findViewById(R.id.layoutTempleResult);
+        tvTempleFixedResult = (TextView) findViewById(R.id.tvTempleFixedResult);
+        tvTempleResultBadge = (TextView) findViewById(R.id.tvTempleResultBadge);
+
+        // Room
         tvRoomTemp = (TextView) findViewById(R.id.tvRoomTemp);
         tvRoomStatus = (TextView) findViewById(R.id.tvRoomStatus);
         btnStartRoomMeasure = (Button) findViewById(R.id.btnStartRoomMeasure);
         tvRoomCountdown = (TextView) findViewById(R.id.tvRoomCountdown);
 
+        // History
+        layoutHistoryList = (LinearLayout) findViewById(R.id.layoutHistoryList);
+        tvHistoryEmpty = (TextView) findViewById(R.id.tvHistoryEmpty);
+        btnClearHistory = (Button) findViewById(R.id.btnClearHistory);
+
+        // Hardware
         tvAmbientTemp = (TextView) findViewById(R.id.tvAmbientTemp);
         tvBatteryTemp = (TextView) findViewById(R.id.tvBatteryTemp);
         tvSensorList = (TextView) findViewById(R.id.tvSensorList);
 
+        // Calibration
         btnOffsetMinus = (Button) findViewById(R.id.btnOffsetMinus);
         tvOffsetVal = (TextView) findViewById(R.id.tvOffsetVal);
         btnOffsetPlus = (Button) findViewById(R.id.btnOffsetPlus);
     }
 
     private void setupListeners() {
+        btnVoiceMute.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (voiceAssistant != null) {
+                    voiceAssistant.toggleMute();
+                    updateVoiceButton();
+                    vibrateTick();
+                }
+            }
+        });
+
         btnUnitToggle.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -234,6 +319,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
                         .edit().putBoolean(PREF_IS_FAHRENHEIT, isFahrenheit).apply();
                 vibrateTick();
                 updateUnitButton();
+                updateHistoryView();
                 recalculateAndDisplay();
             }
         });
@@ -245,10 +331,17 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             }
         });
 
-        btnTabRoom.setOnClickListener(new View.OnClickListener() {
+        btnTabTemple.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 switchMode(1);
+            }
+        });
+
+        btnTabRoom.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                switchMode(2);
             }
         });
 
@@ -273,10 +366,36 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             }
         });
 
+        btnSpeakResult.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (voiceAssistant != null) {
+                    voiceAssistant.speakTemperature(lastMeasuredBodyWrist, isFahrenheit);
+                    vibrateTick();
+                }
+            }
+        });
+
+        btnStartTempleMeasure.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startTempleMeasurement();
+            }
+        });
+
         btnStartRoomMeasure.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 startRoomMeasurement();
+            }
+        });
+
+        btnClearHistory.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                TempLogManager.clearHistory(MainActivity.this);
+                updateHistoryView();
+                vibrateTick();
             }
         });
 
@@ -299,6 +418,12 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
                 }
             }
         });
+    }
+
+    private void updateVoiceButton() {
+        if (btnVoiceMute != null && voiceAssistant != null) {
+            btnVoiceMute.setImageResource(voiceAssistant.isMuted() ? R.drawable.ic_volume_off : R.drawable.ic_volume_up);
+        }
     }
 
     private void saveOffset() {
@@ -325,21 +450,32 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     private void switchMode(int mode) {
         currentMode = mode;
         vibrateTick();
+
+        btnTabWrist.setBackground(null);
+        btnTabWrist.setTextColor(Color.parseColor("#9E9E9E"));
+        btnTabTemple.setBackground(null);
+        btnTabTemple.setTextColor(Color.parseColor("#9E9E9E"));
+        btnTabRoom.setBackground(null);
+        btnTabRoom.setTextColor(Color.parseColor("#9E9E9E"));
+
+        layoutWristMode.setVisibility(View.GONE);
+        layoutTempleMode.setVisibility(View.GONE);
+        layoutRoomMode.setVisibility(View.GONE);
+
         if (mode == 0) {
             btnTabWrist.setBackgroundResource(R.drawable.tab_selected_bg);
             btnTabWrist.setTextColor(Color.WHITE);
-            btnTabRoom.setBackground(null);
-            btnTabRoom.setTextColor(Color.parseColor("#9E9E9E"));
             layoutWristMode.setVisibility(View.VISIBLE);
-            layoutRoomMode.setVisibility(View.GONE);
+        } else if (mode == 1) {
+            btnTabTemple.setBackgroundResource(R.drawable.tab_selected_bg);
+            btnTabTemple.setTextColor(Color.WHITE);
+            layoutTempleMode.setVisibility(View.VISIBLE);
         } else {
             btnTabRoom.setBackgroundResource(R.drawable.tab_selected_bg);
             btnTabRoom.setTextColor(Color.WHITE);
-            btnTabWrist.setBackground(null);
-            btnTabWrist.setTextColor(Color.parseColor("#9E9E9E"));
-            layoutWristMode.setVisibility(View.GONE);
             layoutRoomMode.setVisibility(View.VISIBLE);
         }
+
         recalculateAndDisplay();
     }
 
@@ -402,7 +538,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             }
         }
 
-        tvSensorList.setText("Xiaomi Watch 5 • Wear OS • v1.4.0");
+        tvSensorList.setText("Xiaomi Watch 5 • Wear OS • v2.0.0");
     }
 
     private void pollThermalSources() {
@@ -490,6 +626,10 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             tvRoomStatus.setText("Тёплое / душное помещение");
         }
 
+        // --- Temple Mode Live Preview ---
+        float liveTempleSkin = directSkinTemp > 0 ? directSkinTemp : (lastBatteryTemp > 0 ? lastBatteryTemp : 35.8f);
+        tvTempleTemp.setText(formatTemp(liveTempleSkin + tempOffset));
+
         // --- Wrist Mode Processing ---
         if (directSkinTemp > 0) {
             float bodyEst = 36.5f + (directSkinTemp - 33.4f) * 0.25f;
@@ -503,6 +643,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             tvSkinStatus.setText(String.format(Locale.US, "Goodix • Тело ~%s", formatTemp(calibratedBody)));
             savePrefsAndUpdateComplication(calibratedSkin, calibratedBody, ambientVal);
             updateSparkline(calibratedSkin);
+            updateThermalBalance(calibratedSkin, ambientVal);
             return;
         }
 
@@ -542,15 +683,44 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
                 }
                 savePrefsAndUpdateComplication(calibratedSkin, calibratedBody, ambientVal);
                 updateSparkline(calibratedSkin);
+                updateThermalBalance(calibratedSkin, ambientVal);
             } else {
                 currentCalculatedSkin = rawContact;
                 currentCalculatedBody = 36.6f;
                 tvSkinTemp.setText(formatTemp(rawContact));
                 tvSkinStatus.setText("Наденьте часы плотно на руку");
+                updateThermalBalance(rawContact, ambientVal);
             }
         } else {
             tvSkinTemp.setText("Измерение...");
             tvSkinStatus.setText("Опрос термодатчиков часов");
+        }
+    }
+
+    private void updateThermalBalance(float skinVal, float ambientVal) {
+        if (tvDeltaT == null) return;
+        float amb = ambientVal > 0 ? ambientVal : (lastBatteryTemp > 0 ? lastBatteryTemp - 2.5f : 24.0f);
+        float delta = skinVal - amb;
+
+        if (isFahrenheit) {
+            float deltaF = delta * 1.8f;
+            tvDeltaT.setText(String.format(Locale.US, "%+.1f °F", deltaF));
+        } else {
+            tvDeltaT.setText(String.format(Locale.US, "%+.1f °C", delta));
+        }
+
+        if (delta < 5.0f) {
+            tvThermalStatus.setText("❄️ Спазм сосудов (озноб/холод)");
+            tvThermalStatus.setTextColor(Color.parseColor("#00E5FF"));
+            tvThermalDesc.setText("Периферические сосуды сужены");
+        } else if (delta <= 12.0f) {
+            tvThermalStatus.setText("🌿 Оптимальный тонус сосудов");
+            tvThermalStatus.setTextColor(Color.parseColor("#00E676"));
+            tvThermalDesc.setText("Идеальный градиент терморегуляции");
+        } else {
+            tvThermalStatus.setText("🔥 Активная теплоотдача (жар)");
+            tvThermalStatus.setTextColor(Color.parseColor("#FF7A00"));
+            tvThermalDesc.setText("Усиленный кровоток периферии");
         }
     }
 
@@ -565,6 +735,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
     }
 
+    // --- Wrist Measurement (30 seconds) ---
     private void startMeasurement() {
         isMeasuring = true;
         measureSecondsLeft = 30;
@@ -632,6 +803,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         if (finalBody < 35.0f) finalBody = 35.0f;
         if (finalBody > 39.5f) finalBody = 39.5f;
 
+        lastMeasuredBodyWrist = finalBody;
         tvFixedResult.setText(formatTemp(finalBody));
 
         if (finalBody < 35.5f) {
@@ -652,6 +824,15 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             tvFixedResult.setTextColor(Color.parseColor("#FF5252"));
         }
 
+        // Voice announcement
+        if (voiceAssistant != null) {
+            voiceAssistant.speakTemperature(finalBody, isFahrenheit);
+        }
+
+        // Save to History Log
+        TempLogManager.saveRecord(this, finalBody, finalSkin, 0);
+        updateHistoryView();
+
         savePrefsAndUpdateComplication(finalSkin, finalBody, lastAmbientTemp);
     }
 
@@ -662,10 +843,100 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         btnStartMeasure.setVisibility(View.VISIBLE);
     }
 
-    // Room measurement routine
+    // --- Temple / Forehead Measurement (15 seconds) ---
+    private void startTempleMeasurement() {
+        isTempleMeasuring = true;
+        templeSecondsLeft = 15;
+        templeSamples.clear();
+
+        btnStartTempleMeasure.setVisibility(View.GONE);
+        layoutTempleResult.setVisibility(View.GONE);
+        tvTempleCountdown.setVisibility(View.VISIBLE);
+        tvTempleCountdown.setText("15 сек... Держите у виска");
+
+        vibrateShort();
+
+        uiHandler.removeCallbacks(templeCountdownRunnable);
+        uiHandler.postDelayed(templeCountdownRunnable, 1000);
+    }
+
+    private void tickTempleMeasure() {
+        if (!isTempleMeasuring) return;
+
+        templeSecondsLeft--;
+        vibrateTick(); // Per-second haptic feedback for user assurance while watch is against temple
+
+        float sample = directSkinTemp > 0 ? directSkinTemp : (lastBatteryTemp > 0 ? lastBatteryTemp : 35.8f);
+        templeSamples.add(sample);
+
+        tvTempleCountdown.setText(templeSecondsLeft + " сек... Держите у виска");
+
+        if (templeSecondsLeft > 0) {
+            uiHandler.postDelayed(templeCountdownRunnable, 1000);
+        } else {
+            finishTempleMeasurement();
+        }
+    }
+
+    private void finishTempleMeasurement() {
+        isTempleMeasuring = false;
+        vibrateDouble();
+
+        tvTempleCountdown.setVisibility(View.GONE);
+        layoutTempleResult.setVisibility(View.VISIBLE);
+        btnStartTempleMeasure.setVisibility(View.VISIBLE);
+        btnStartTempleMeasure.setText("⏱️ ПОВТОРИТЬ ЗАМЕР НА ВИСКЕ");
+
+        float templeSkin = 35.8f;
+        if (!templeSamples.isEmpty()) {
+            float sum = 0;
+            for (float s : templeSamples) sum += s;
+            templeSkin = sum / templeSamples.size();
+        }
+
+        // Temporal artery physiology: thinner stratum corneum, higher perfusion.
+        // Arterial blood core offset is ~ +0.35°C
+        float templeBody = templeSkin + 0.35f + tempOffset;
+        if (templeBody < 35.0f) templeBody = 35.0f;
+        if (templeBody > 40.0f) templeBody = 40.0f;
+
+        lastMeasuredBodyTemple = templeBody;
+        tvTempleFixedResult.setText(formatTemp(templeBody));
+
+        if (templeBody < 35.5f) {
+            tvTempleResultBadge.setText("Пониженная (Височная артерия)");
+            tvTempleResultBadge.setTextColor(Color.parseColor("#00E5FF"));
+            tvTempleFixedResult.setTextColor(Color.parseColor("#00E5FF"));
+        } else if (templeBody <= 37.2f) {
+            tvTempleResultBadge.setText("✓ Норма (Височная артерия)");
+            tvTempleResultBadge.setTextColor(Color.parseColor("#00E676"));
+            tvTempleFixedResult.setTextColor(Color.parseColor("#00E676"));
+        } else if (templeBody <= 38.0f) {
+            tvTempleResultBadge.setText("⚠ Субфебрильная (Висок)");
+            tvTempleResultBadge.setTextColor(Color.parseColor("#FFA000"));
+            tvTempleFixedResult.setTextColor(Color.parseColor("#FFA000"));
+        } else {
+            tvTempleResultBadge.setText("🔥 Повышенная (Висок)");
+            tvTempleResultBadge.setTextColor(Color.parseColor("#FF5252"));
+            tvTempleFixedResult.setTextColor(Color.parseColor("#FF5252"));
+        }
+
+        // Voice announcement
+        if (voiceAssistant != null) {
+            voiceAssistant.speakTemperature(templeBody, isFahrenheit);
+        }
+
+        // Save to History Log
+        TempLogManager.saveRecord(this, templeBody, templeSkin, 1);
+        updateHistoryView();
+
+        savePrefsAndUpdateComplication(templeSkin, templeBody, lastAmbientTemp);
+    }
+
+    // --- Room Measurement (60 seconds) ---
     private void startRoomMeasurement() {
         isRoomMeasuring = true;
-        roomSecondsLeft = 60; // 60 seconds precision ambient test
+        roomSecondsLeft = 60;
         btnStartRoomMeasure.setVisibility(View.GONE);
         tvRoomCountdown.setVisibility(View.VISIBLE);
         tvRoomCountdown.setText("Замер воздуха: 60 сек...");
@@ -688,6 +959,71 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             tvRoomCountdown.setText("✓ Замер зафиксирован");
             btnStartRoomMeasure.setText("⏱️ Повторить замер воздуха");
             btnStartRoomMeasure.setVisibility(View.VISIBLE);
+
+            float ambientVal = lastAmbientTemp > 0 ? lastAmbientTemp : (lastBatteryTemp > 0 ? lastBatteryTemp - 2.5f : 24.0f);
+            TempLogManager.saveRecord(this, ambientVal, ambientVal, 2);
+            updateHistoryView();
+        }
+    }
+
+    // --- History View Rendering ---
+    private void updateHistoryView() {
+        if (layoutHistoryList == null) return;
+
+        List<TempLogManager.Entry> entries = TempLogManager.getHistory(this);
+
+        // Remove all views except the empty placeholder
+        layoutHistoryList.removeAllViews();
+
+        if (entries.isEmpty()) {
+            if (tvHistoryEmpty != null) {
+                tvHistoryEmpty.setVisibility(View.VISIBLE);
+                layoutHistoryList.addView(tvHistoryEmpty);
+            }
+            return;
+        }
+
+        if (tvHistoryEmpty != null) {
+            tvHistoryEmpty.setVisibility(View.GONE);
+        }
+
+        for (int i = 0; i < entries.size(); i++) {
+            TempLogManager.Entry e = entries.get(i);
+
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(0, 4, 0, 4);
+
+            TextView tvLeft = new TextView(this);
+            tvLeft.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f));
+            tvLeft.setText(String.format(Locale.getDefault(), "[%s] %s", e.getModeLabel(), e.getFormattedTime()));
+            tvLeft.setTextColor(Color.parseColor("#9E9E9E"));
+            tvLeft.setTextSize(9f);
+
+            TextView tvRight = new TextView(this);
+            String deltaStr = "";
+            if (e.deltaPrev > 0.05f) {
+                deltaStr = String.format(Locale.US, " (+%.1f°↑)", e.deltaPrev);
+            } else if (e.deltaPrev < -0.05f) {
+                deltaStr = String.format(Locale.US, " (%.1f°↓)", e.deltaPrev);
+            } else {
+                deltaStr = " (=)";
+            }
+
+            tvRight.setText(formatTempShort(e.tempBody) + deltaStr);
+            if (e.tempBody > 37.2f) {
+                tvRight.setTextColor(Color.parseColor("#FFA000"));
+            } else if (e.tempBody < 35.5f) {
+                tvRight.setTextColor(Color.parseColor("#00E5FF"));
+            } else {
+                tvRight.setTextColor(Color.parseColor("#00E676"));
+            }
+            tvRight.setTextSize(10f);
+
+            row.addView(tvLeft);
+            row.addView(tvRight);
+            layoutHistoryList.addView(row);
         }
     }
 
@@ -767,6 +1103,12 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         if (isMeasuring) {
             cancelMeasurement();
         }
+        if (isTempleMeasuring) {
+            isTempleMeasuring = false;
+            uiHandler.removeCallbacks(templeCountdownRunnable);
+            tvTempleCountdown.setVisibility(View.GONE);
+            btnStartTempleMeasure.setVisibility(View.VISIBLE);
+        }
         if (isRoomMeasuring) {
             isRoomMeasuring = false;
             uiHandler.removeCallbacks(roomCountdownRunnable);
@@ -783,6 +1125,15 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             try {
                 sensorManager.unregisterListener(this);
             } catch (Exception ignored) {}
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (voiceAssistant != null) {
+            voiceAssistant.destroy();
+            voiceAssistant = null;
         }
     }
 

@@ -120,6 +120,31 @@ public class SparklineView extends View {
         return sum / dataPoints.size();
     }
 
+    public static class Stats {
+        public float min;
+        public float avg;
+        public float max;
+        public int count;
+    }
+
+    public synchronized Stats getStats() {
+        Stats s = new Stats();
+        s.count = dataPoints.size();
+        if (s.count == 0) return s;
+        float min = Float.MAX_VALUE;
+        float max = -Float.MAX_VALUE;
+        float sum = 0f;
+        for (float v : dataPoints) {
+            if (v < min) min = v;
+            if (v > max) max = v;
+            sum += v;
+        }
+        s.min = min;
+        s.max = max;
+        s.avg = sum / s.count;
+        return s;
+    }
+
     public synchronized int getCount() {
         return dataPoints.size();
     }

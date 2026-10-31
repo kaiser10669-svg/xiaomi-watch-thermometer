@@ -180,15 +180,19 @@ public class TempLogManager {
 
         // Clinical body trend calculation (comparing latest body reading to oldest in 24h window)
         Entry latest = bodyHistory.get(0);
-        Entry oldest = bodyHistory.get(Math.min(bodyHistory.size() - 1, 4));
-        float trendDelta = Math.round((latest.tempBody - oldest.tempBody) * 10f) / 10f;
-        float dispTrend = isFahrenheit ? (trendDelta * 1.8f) : trendDelta;
-        if (trendDelta >= 0.3f) {
-            report.trendStr = String.format(Locale.US, "Подъём (+%.1f %s↑)", dispTrend, unit);
-        } else if (trendDelta <= -0.3f) {
-            report.trendStr = String.format(Locale.US, "Снижение (%.1f %s↓)", Math.abs(dispTrend), unit);
+        Entry oldest = bodyHistory.get(bodyHistory.size() - 1);
+        if (bodyHistory.size() == 1) {
+            report.trendStr = "Первый замер за 24ч (база)";
         } else {
-            report.trendStr = "Стабильная динамика (=)";
+            float trendDelta = Math.round((latest.tempBody - oldest.tempBody) * 10f) / 10f;
+            float dispTrend = isFahrenheit ? (trendDelta * 1.8f) : trendDelta;
+            if (trendDelta >= 0.3f) {
+                report.trendStr = String.format(Locale.US, "Подъём (+%.1f %s↑)", dispTrend, unit);
+            } else if (trendDelta <= -0.3f) {
+                report.trendStr = String.format(Locale.US, "Снижение (-%.1f %s↓)", Math.abs(dispTrend), unit);
+            } else {
+                report.trendStr = "Стабильная динамика (=)";
+            }
         }
 
         if (maxC > 38.5f) {

@@ -201,6 +201,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
     private boolean isRoomMeasuring = false;
     private int roomSecondsLeft = 60;
+    private final List<Float> roomSamples = new ArrayList<>();
 
     private float currentCalculatedSkin = -1.0f;
     private float currentCalculatedBody = -1.0f;
@@ -860,12 +861,13 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
 
         if (tvSensorList != null) {
-            tvSensorList.setText("Xiaomi Watch 5 • Clinical v4.7.0");
+            tvSensorList.setText("Xiaomi Watch 5 • Clinical v4.8.0");
         }
     }
 
     private void pollThermalSources() {
-        ioExecutor.execute(new Runnable() {
+        if (!ioExecutor.isShutdown()) {
+            ioExecutor.execute(new Runnable() {
             @Override
             public void run() {
                 if (!thermalZonesDiscovered) {
@@ -902,6 +904,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
                 }
             }
         });
+        }
 
         try {
             Intent bi = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
@@ -1316,23 +1319,26 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
     }
 
-    private void updateSparkline(float skin) {
-        if (skin > 15.0f && sparklineView != null) {
-            sparklineView.addPoint(skin);
+    private void updateSparkline(float bodyTemp) {
+        if (bodyTemp > 15.0f && sparklineView != null) {
+            sparklineView.addPoint(bodyTemp);
             updateSparklineStats();
         }
     }
 
     private void updateSparklineStats() {
-        if (sparklineView != null && sparklineView.getCount() > 0) {
-            tvStatMin.setText(formatTempShort(sparklineView.getMin()));
-            tvStatAvg.setText(formatTempShort(sparklineView.getAvg()));
-            tvStatMax.setText(formatTempShort(sparklineView.getMax()));
-        } else {
-            if (tvStatMin != null) tvStatMin.setText("--.-°");
-            if (tvStatAvg != null) tvStatAvg.setText("--.-°");
-            if (tvStatMax != null) tvStatMax.setText("--.-°");
+        if (sparklineView != null) {
+            SparklineView.Stats stats = sparklineView.getStats();
+            if (stats.count > 0) {
+                tvStatMin.setText(formatTempShort(stats.min));
+                tvStatAvg.setText(formatTempShort(stats.avg));
+                tvStatMax.setText(formatTempShort(stats.max));
+                return;
+            }
         }
+        if (tvStatMin != null) tvStatMin.setText("--.-°");
+        if (tvStatAvg != null) tvStatAvg.setText("--.-°");
+        if (tvStatMax != null) tvStatMax.setText("--.-°");
     }
 
     // --- Wrist Measurement (30 seconds) ---
@@ -1595,7 +1601,11 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         float sample = hardwareSkinTemp > 0 ? hardwareSkinTemp : (directSkinTemp > 0 ? directSkinTemp : (lastBatteryTemp > 0 ? lastBatteryTemp : 35.8f));
         templeSamples.add(sample);
 
-        tvTempleCountdown.setText(templeSecondsLeft + " сек... Держите у виска");
+        if (sample < 29.5f) {
+            tvTempleCountdown.setText(templeSecondsLeft + " сек... Плотно прижмите к виску!");
+        } else {
+            tvTempleCountdown.setText(templeSecondsLeft + " сек... Держите у виска");
+        }
 
         if (templeSecondsLeft > 0) {
             uiHandler.postDelayed(templeCountdownRunnable, 1000);
@@ -1607,13 +1617,6 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     private void finishTempleMeasurement() {
         setWakeLockActive(false);
         isTempleMeasuring = false;
-
-        tvTempleCountdown.setVisibility(View.GONE);
-        if (btnCancelTempleMeasure != null) btnCancelTempleMeasure.setVisibility(View.GONE);
-        if (tvTempleStatus != null) tvTempleStatus.setText("✓ Замер зафиксирован");
-        layoutTempleResult.setVisibility(View.VISIBLE);
-        btnStartTempleMeasure.setVisibility(View.VISIBLE);
-        btnStartTempleMeasure.setText("⏱️ ПОВТОРИТЬ ЗАМЕР НА ВИСКЕ");
 
         float templeSkin = 35.8f;
         if (!templeSamples.isEmpty()) {
@@ -1629,6 +1632,30 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
                 }
             }
         }
+
+        // Biological human temple contact verification
+        if (templeSkin < 30.0f) {
+            tvTempleCountdown.setVisibility(View.GONE);
+            if (btnCancelTempleMeasure != null) btnCancelTempleMeasure.setVisibility(View.GONE);
+            if (tvTempleStatus != null) {
+                tvTempleStatus.setText("⚠️ Недостаточный контакт. Прижмите плотнее!");
+                tvTempleStatus.setTextColor(Color.parseColor("#FFA000"));
+            }
+            btnStartTempleMeasure.setVisibility(View.VISIBLE);
+            btnStartTempleMeasure.setText("⏱️ ПОВТОРИТЬ ЗАМЕР НА ВИСКЕ");
+            vibrateShort();
+            return;
+        }
+
+        tvTempleCountdown.setVisibility(View.GONE);
+        if (btnCancelTempleMeasure != null) btnCancelTempleMeasure.setVisibility(View.GONE);
+        if (tvTempleStatus != null) {
+            tvTempleStatus.setText("✓ Замер зафиксирован");
+            tvTempleStatus.setTextColor(Color.parseColor("#00E676"));
+        }
+        layoutTempleResult.setVisibility(View.VISIBLE);
+        btnStartTempleMeasure.setVisibility(View.VISIBLE);
+        btnStartTempleMeasure.setText("⏱️ ПОВТОРИТЬ ЗАМЕР НА ВИСКЕ");
 
         long now = System.currentTimeMillis();
         float circBase = CircadianModel.getBaseline(now);
@@ -1697,6 +1724,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         setWakeLockActive(true);
         isRoomMeasuring = true;
         roomSecondsLeft = 60;
+        roomSamples.clear();
         btnStartRoomMeasure.setVisibility(View.GONE);
         tvRoomCountdown.setVisibility(View.VISIBLE);
         if (btnCancelRoomMeasure != null) btnCancelRoomMeasure.setVisibility(View.VISIBLE);
@@ -1721,6 +1749,11 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             return;
         }
         roomSecondsLeft--;
+        vibrateTick();
+
+        float rawContact = getCompensatedContactTemp();
+        roomSamples.add(rawContact);
+
         tvRoomCountdown.setText("Замер воздуха: " + roomSecondsLeft + " сек...");
 
         if (roomSecondsLeft > 0) {
@@ -1731,11 +1764,30 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             vibrateDouble();
             if (btnCancelRoomMeasure != null) btnCancelRoomMeasure.setVisibility(View.GONE);
             if (tvRoomCountdown != null) tvRoomCountdown.setVisibility(View.GONE);
-            if (tvRoomStatus != null) tvRoomStatus.setText("✓ Микроклимат определён");
+            if (tvRoomStatus != null) {
+                tvRoomStatus.setText("✓ Микроклимат определён");
+                tvRoomStatus.setTextColor(Color.parseColor("#00E676"));
+            }
             btnStartRoomMeasure.setText("⏱️ Повторить замер воздуха");
             btnStartRoomMeasure.setVisibility(View.VISIBLE);
 
-            float ambientVal = lastAmbientTemp > 0 ? lastAmbientTemp : (lastBatteryTemp > 0 ? lastBatteryTemp - 2.5f : 24.0f);
+            float ambientVal;
+            if (lastAmbientTemp > 0) {
+                ambientVal = lastAmbientTemp;
+            } else if (!roomSamples.isEmpty()) {
+                // Thermal plateau: average the final 15 samples after cool-down
+                int count = Math.min(roomSamples.size(), 15);
+                float sum = 0f;
+                for (int i = roomSamples.size() - count; i < roomSamples.size(); i++) {
+                    sum += roomSamples.get(i);
+                }
+                float settledPlateau = sum / count;
+                // If watch battery was heated, battery is ~1.5 - 2.5°C above ambient air
+                ambientVal = settledPlateau - 1.8f;
+                if (ambientVal < 10.0f) ambientVal = 10.0f;
+            } else {
+                ambientVal = (lastBatteryTemp > 0 ? lastBatteryTemp - 2.5f : 24.0f);
+            }
             ambientVal = Math.round(ambientVal * 10f) / 10f;
             lastMeasuredRoom = ambientVal;
 
@@ -1989,10 +2041,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         if (voiceAssistant != null) {
             voiceAssistant.stop();
         }
-        if (clinicalDialog != null && clinicalDialog.isShowing()) {
-            clinicalDialog.dismiss();
-            clinicalDialog = null;
-        }
+        // Keep clinicalDialog visible across brief screen dimming/ambient transitions
 
         uiHandler.removeCallbacks(this);
         try {
@@ -2014,10 +2063,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         try {
             unregisterReceiver(batteryReceiver);
         } catch (Exception ignored) {}
-        if (clinicalDialog != null && clinicalDialog.isShowing()) {
-            clinicalDialog.dismiss();
-            clinicalDialog = null;
-        }
+        // Keep clinicalDialog visible across brief screen dimming/ambient transitions
         if (ioExecutor != null && !ioExecutor.isShutdown()) {
             ioExecutor.shutdownNow();
         }

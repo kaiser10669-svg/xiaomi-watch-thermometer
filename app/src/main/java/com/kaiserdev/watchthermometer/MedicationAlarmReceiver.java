@@ -158,6 +158,15 @@ public class MedicationAlarmReceiver extends BroadcastReceiver {
                   .setCategory(Notification.CATEGORY_ALARM)
                   .setOngoing(false);
 
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
+                    Notification.Action action = new Notification.Action.Builder(
+                            R.drawable.ic_complication_temp,
+                            "Замерить",
+                            contentIntent
+                    ).build();
+                    nb.addAction(action);
+                }
+
                 nm.notify(NOTIFICATION_ID, nb.build());
             }
         } catch (Throwable ignored) {}

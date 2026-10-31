@@ -240,10 +240,24 @@ public class ThermometerComplicationService extends Service {
     public static void requestComplicationUpdate(Context context) {
         if (context == null) return;
         try {
-            Intent intent = new Intent("android.support.wearable.complications.ACTION_REQUEST_UPDATE_ALL");
-            intent.putExtra("android.support.wearable.complications.EXTRA_PROVIDER_COMPONENT",
-                    new ComponentName(context, ThermometerComplicationService.class));
-            context.sendBroadcast(intent);
+            ComponentName comp = new ComponentName(context, ThermometerComplicationService.class);
+
+            // 1. Wear OS system broadcast with explicit package targeting
+            Intent intent1 = new Intent("android.support.wearable.complications.ACTION_REQUEST_UPDATE_ALL");
+            intent1.setPackage("com.google.android.wearable.app");
+            intent1.putExtra("android.support.wearable.complications.EXTRA_PROVIDER_COMPONENT", comp);
+            context.sendBroadcast(intent1);
+
+            // 2. Broadcast without package restriction for OEM watchfaces (Xiaomi MiWear, WatchMaker, Pujie)
+            Intent intent2 = new Intent("android.support.wearable.complications.ACTION_REQUEST_UPDATE_ALL");
+            intent2.putExtra("android.support.wearable.complications.EXTRA_PROVIDER_COMPONENT", comp);
+            context.sendBroadcast(intent2);
+
+            // 3. AndroidX / Jetpack Wear OS 3+ / 4+ modern watchface complication protocol
+            Intent intent3 = new Intent("androidx.wear.watchface.complications.action.REQUEST_UPDATE_ALL");
+            intent3.setPackage("com.google.android.wearable.app");
+            intent3.putExtra("androidx.wear.watchface.complications.extra.PROVIDER_COMPONENT", comp);
+            context.sendBroadcast(intent3);
         } catch (Exception ignored) {}
     }
 }

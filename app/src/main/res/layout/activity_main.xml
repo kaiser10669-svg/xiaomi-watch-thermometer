@@ -1836,7 +1836,7 @@
 
                         android:layout_height="wrap_content"
 
-                        android:text="БАРОМЕТР"
+                        android:text="ВОЗДУХ"
 
                         android:textColor="@color/text_title"
 
@@ -2054,7 +2054,7 @@
 
             android:layout_height="wrap_content"
 
-            android:text="Xiaomi Watch 5 • Clinical v4.2.0"
+            android:text="Xiaomi Watch 5 • Clinical v4.3.0"
 
             android:textColor="@color/text_title"
 

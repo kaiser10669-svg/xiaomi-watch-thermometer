@@ -8,6 +8,7 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
@@ -437,6 +438,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
                 updateUnitButton();
                 updateOffsetView();
                 updateHistoryView();
+                updateSparklineStats();
                 recalculateAndDisplay();
                 ThermometerComplicationService.requestComplicationUpdate(MainActivity.this);
             }
@@ -553,12 +555,23 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         btnClearHistory.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                TempLogManager.clearHistory(MainActivity.this);
-                if (sparklineView != null) {
-                    sparklineView.clear();
-                }
-                updateHistoryView();
-                vibrateTick();
+                new AlertDialog.Builder(MainActivity.this)
+                        .setTitle("Очистить журнал?")
+                        .setMessage("Все сохранённые замеры будут удалены.")
+                        .setPositiveButton("Удалить", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                TempLogManager.clearHistory(MainActivity.this);
+                                if (sparklineView != null) {
+                                    sparklineView.clear();
+                                }
+                                updateHistoryView();
+                                updateSparklineStats();
+                                vibrateTick();
+                            }
+                        })
+                        .setNegativeButton("Отмена", null)
+                        .show();
             }
         });
 
@@ -814,7 +827,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
 
         if (tvSensorList != null) {
-            tvSensorList.setText("Xiaomi Watch 5 • Clinical v4.2.0");
+            tvSensorList.setText("Xiaomi Watch 5 • Clinical v4.3.0");
         }
     }
 
@@ -903,9 +916,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             raw = 32.5f;
         }
 
-        if (isCharging) {
-            raw -= 4.2f; // Charging coil thermal dissipation offset
-        }
+// Charging check handled by mode guards; raw reflects true hardware casing temp
 
         if (directSkinTemp <= 0 && hardwareCpuTemp > raw && hardwareCpuTemp < 80.0f) {
             float cpuExcess = hardwareCpuTemp - raw;
@@ -1090,7 +1101,14 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             skinDelta *= 0.35f;
         }
 
-        float skinFactor = (filteredSkin > 33.5f) ? 0.50f : 0.40f;
+        float skinFactor;
+        if (filteredSkin > 34.5f) {
+            skinFactor = 0.50f + Math.min(0.25f, (filteredSkin - 34.5f) * 0.12f);
+        } else if (filteredSkin > 33.0f) {
+            skinFactor = 0.48f;
+        } else {
+            skinFactor = 0.38f;
+        }
         // User calibration offset applied strictly once to final body temperature
         float calculatedBody = circadianBase + (skinDelta * skinFactor) + ambientDelta + tempOffset;
 
@@ -1256,11 +1274,19 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     private void updateSparkline(float skin) {
         if (skin > 15.0f && sparklineView != null) {
             sparklineView.addPoint(skin);
-            if (sparklineView.getCount() > 0) {
-                tvStatMin.setText(formatTempShort(sparklineView.getMin()));
-                tvStatAvg.setText(formatTempShort(sparklineView.getAvg()));
-                tvStatMax.setText(formatTempShort(sparklineView.getMax()));
-            }
+            updateSparklineStats();
+        }
+    }
+
+    private void updateSparklineStats() {
+        if (sparklineView != null && sparklineView.getCount() > 0) {
+            tvStatMin.setText(formatTempShort(sparklineView.getMin()));
+            tvStatAvg.setText(formatTempShort(sparklineView.getAvg()));
+            tvStatMax.setText(formatTempShort(sparklineView.getMax()));
+        } else {
+            if (tvStatMin != null) tvStatMin.setText("--.-°");
+            if (tvStatAvg != null) tvStatAvg.setText("--.-°");
+            if (tvStatMax != null) tvStatMax.setText("--.-°");
         }
     }
 
@@ -1295,6 +1321,12 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         if (!isMeasuring) return;
         if (isPlugged || isCharging) {
             cancelMeasurement();
+            return;
+        }
+        if (!isOnWrist && directSkinTemp <= 0) {
+            cancelMeasurement();
+            tvMeasureTip.setText("⚠️ Замер прерван: часы сняты с руки");
+            vibrateShort();
             return;
         }
 
@@ -1360,7 +1392,14 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         if (CircadianModel.isNightSleepPhase(now) && skinDelta > 0) {
             skinDelta *= 0.35f;
         }
-        float skinFactor = (finalSkin > 33.5f) ? 0.50f : 0.40f;
+        float skinFactor;
+        if (finalSkin > 34.5f) {
+            skinFactor = 0.50f + Math.min(0.25f, (finalSkin - 34.5f) * 0.12f);
+        } else if (finalSkin > 33.0f) {
+            skinFactor = 0.48f;
+        } else {
+            skinFactor = 0.38f;
+        }
         float finalBody = circadianBase + (skinDelta * skinFactor) + ambientDelta + tempOffset;
         if (finalBody < 34.0f) finalBody = 34.0f;
         if (finalBody > 42.0f) finalBody = 42.0f;

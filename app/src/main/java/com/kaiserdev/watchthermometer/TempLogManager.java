@@ -197,8 +197,10 @@ public class TempLogManager {
             report.statusSummary = "Умеренная лихорадка";
         } else if (maxC > 37.2f) {
             report.statusSummary = "Субфебрилитет";
-        } else if (minC < 35.5f) {
+        } else if (report.avgTemp < 35.5f) {
             report.statusSummary = "Гипотермия";
+        } else if (minC < 35.5f) {
+            report.statusSummary = "Эпизод переохлаждения";
         } else {
             report.statusSummary = "В пределах нормы";
         }

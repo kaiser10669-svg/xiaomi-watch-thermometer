@@ -592,6 +592,8 @@
 
                         android:id="@+id/btnRepeatMeasure"
 
+                    android:textAllCaps="false"
+
                         android:layout_width="wrap_content"
 
                         android:layout_height="28dp"
@@ -606,9 +608,7 @@
 
                         android:paddingLeft="16dp"
 
-                        android:paddingRight="16dp"
-
-                        android:textAllCaps="false" />
+                        android:paddingRight="16dp" />
 
                 </LinearLayout>
 
@@ -1028,6 +1028,8 @@
 
                     android:id="@+id/btnStartTempleMeasure"
 
+                    android:textAllCaps="false"
+
                     android:layout_width="match_parent"
 
                     android:layout_height="34dp"
@@ -1040,9 +1042,7 @@
 
                     android:textSize="10sp"
 
-                    android:textStyle="bold"
-
-                    android:textAllCaps="false" />
+                    android:textStyle="bold" />
 
                 <TextView
 
@@ -1067,6 +1067,8 @@
                 <Button
 
                     android:id="@+id/btnCancelTempleMeasure"
+
+                    android:textAllCaps="false"
 
                     android:layout_width="match_parent"
 
@@ -1270,6 +1272,8 @@
 
                     android:id="@+id/btnStartRoomMeasure"
 
+                    android:textAllCaps="false"
+
                     android:layout_width="match_parent"
 
                     android:layout_height="34dp"
@@ -1282,9 +1286,7 @@
 
                     android:textSize="10sp"
 
-                    android:textStyle="bold"
-
-                    android:textAllCaps="false" />
+                    android:textStyle="bold" />
 
                 <TextView
 
@@ -1309,6 +1311,8 @@
                 <Button
 
                     android:id="@+id/btnCancelRoomMeasure"
+
+                    android:textAllCaps="false"
 
                     android:layout_width="match_parent"
 
@@ -1570,6 +1574,8 @@
 
                     android:id="@+id/btnTimer4h"
 
+                    android:textAllCaps="false"
+
                     android:layout_width="0dp"
 
                     android:layout_height="match_parent"
@@ -1591,6 +1597,8 @@
                 <Button
 
                     android:id="@+id/btnTimer6h"
+
+                    android:textAllCaps="false"
 
                     android:layout_width="0dp"
 
@@ -1690,6 +1698,8 @@
 
                     android:id="@+id/btnClearHistory"
 
+                    android:textAllCaps="false"
+
                     android:layout_width="wrap_content"
 
                     android:layout_height="22dp"
@@ -1745,6 +1755,8 @@
             <Button
 
                 android:id="@+id/btnExportReport"
+
+                    android:textAllCaps="false"
 
                 android:layout_width="match_parent"
 

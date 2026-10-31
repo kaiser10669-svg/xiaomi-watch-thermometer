@@ -192,6 +192,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     private int measureSecondsLeft = 30;
     private final List<Float> measureSamples = new ArrayList<>();
     private float lastMeasuredBodyWrist = -1.0f;
+    private float lastKnownBodyTemp = -1.0f;
 
     private boolean isTempleMeasuring = false;
     private int templeSecondsLeft = 15;
@@ -302,6 +303,13 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         updateOffsetView();
         updateUnitButton();
         updateVoiceButton();
+        List<TempLogManager.Entry> histInit = TempLogManager.getHistory(this);
+        for (TempLogManager.Entry e : histInit) {
+            if (e.mode == 0 || e.mode == 1) {
+                lastKnownBodyTemp = e.tempBody;
+                break;
+            }
+        }
         updateHistoryView();
         updateMedTimerView();
         recalculateAndDisplay();
@@ -566,6 +574,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
                             @Override
                             public void onClick(DialogInterface dialog, int which) {
                                 TempLogManager.clearHistory(MainActivity.this);
+                                lastKnownBodyTemp = -1.0f;
                                 if (sparklineView != null) {
                                     sparklineView.clear();
                                 }
@@ -776,6 +785,10 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             if (layoutFeverAdvisor != null) layoutFeverAdvisor.setVisibility(View.GONE);
         }
 
+        if (mainScrollView != null) {
+            mainScrollView.smoothScrollTo(0, 0);
+        }
+
         recalculateAndDisplay();
     }
 
@@ -785,8 +798,8 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             float delta = -event.getAxisValue(MotionEvent.AXIS_SCROLL);
             float density = getResources().getDisplayMetrics().density;
             int scrollPixels = Math.round(delta * density * 32);
-            if (mainScrollView != null) {
-                int direction = delta > 0 ? 1 : -1;
+            if (scrollPixels != 0 && mainScrollView != null) {
+                int direction = scrollPixels > 0 ? 1 : -1;
                 if (mainScrollView.canScrollVertically(direction)) {
                     mainScrollView.scrollBy(0, scrollPixels);
                     long now = System.currentTimeMillis();
@@ -847,7 +860,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
 
         if (tvSensorList != null) {
-            tvSensorList.setText("Xiaomi Watch 5 • Clinical v4.6.0");
+            tvSensorList.setText("Xiaomi Watch 5 • Clinical v4.7.0");
         }
     }
 
@@ -1214,10 +1227,8 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
     private void updateFeverAdvisorOffbody() {
         if (tvAdvisorStatus == null || tvAdvisorAdvice == null) return;
-        List<TempLogManager.Entry> history = TempLogManager.getHistory(this);
-        if (!history.isEmpty() && (history.get(0).mode == 0 || history.get(0).mode == 1)) {
-            TempLogManager.Entry last = history.get(0);
-            tvAdvisorStatus.setText("Предыдущий замер: " + formatTempShort(last.tempBody));
+        if (lastKnownBodyTemp > 30.0f) {
+            tvAdvisorStatus.setText("Предыдущий замер: " + formatTempShort(lastKnownBodyTemp));
             tvAdvisorStatus.setTextColor(Color.parseColor("#9E9E9E"));
             tvAdvisorAdvice.setText("Для обновления советов и свежей температуры наденьте часы на руку.");
         } else {
@@ -1449,6 +1460,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
 
         lastMeasuredBodyWrist = finalBody;
+        lastKnownBodyTemp = finalBody;
         currentCalculatedBody = finalBody;
         tvFixedResult.setText(formatTemp(finalBody));
         animateBodyTempDisplay(finalBody);
@@ -1634,6 +1646,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
 
         lastMeasuredBodyTemple = templeBody;
+        lastKnownBodyTemp = templeBody;
         tvTempleFixedResult.setText(formatTemp(templeBody));
         tvTempleTemp.setText(formatTemp(templeBody));
 
@@ -1760,6 +1773,12 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             clinicalDialog.dismiss();
         }
         final TempLogManager.ClinicalReport report = TempLogManager.buildClinicalReport(this, isFahrenheit);
+
+        if (report.totalCount == 0) {
+            Toast.makeText(this, "Журнал пуст. Сделайте первый замер", Toast.LENGTH_SHORT).show();
+            vibrateShort();
+            return;
+        }
 
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("📊 Сводка за 24 часа");

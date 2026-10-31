@@ -214,8 +214,13 @@ public class TempLogManager {
         float dispMax = isFahrenheit ? (maxC * 1.8f + 32f) : maxC;
         float dispAvg = isFahrenheit ? (report.avgTemp * 1.8f + 32f) : report.avgTemp;
 
+        SimpleDateFormat sdf = new SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault());
+        String timeStr = sdf.format(new Date(now));
+
         StringBuilder sb = new StringBuilder();
         sb.append("📊 Клиническая сводка (24ч)\n");
+        sb.append("• Время: ").append(timeStr).append("\n");
+        sb.append("• Устройство: Xiaomi Watch 5\n");
         sb.append("• Статус: ").append(report.statusSummary).append("\n");
         sb.append(String.format(Locale.US, "• Максимум: %.1f %s\n", dispMax, unit));
         sb.append(String.format(Locale.US, "• Средняя:  %.1f %s\n", dispAvg, unit));

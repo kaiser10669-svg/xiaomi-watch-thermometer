@@ -107,7 +107,9 @@ public class ThermometerComplicationService extends Service {
                     }
                 }
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable t) {
+            sCachedSkinZone = -1;
+        }
         return -1.0f;
     }
 
@@ -181,11 +183,16 @@ public class ThermometerComplicationService extends Service {
         PendingIntent tapAction = PendingIntent.getActivity(this, complicationId, launchIntent, piFlags);
         Icon icon = Icon.createWithResource(this, R.drawable.ic_complication_temp);
 
+        boolean isRu = Locale.getDefault().getLanguage().equalsIgnoreCase("ru");
+        String shortTitle = isRu ? "ТЕЛО" : "BODY";
+        String longTitle = isRu ? "Термометр" : "Thermometer";
+        String longText = isRu ? ("Тело: " + bodyStr + " • Кожа: " + tempStr) : ("Body: " + bodyStr + " • Skin: " + tempStr);
+
         ComplicationData.Builder builder;
         if (type == ComplicationData.TYPE_SHORT_TEXT) {
             builder = new ComplicationData.Builder(ComplicationData.TYPE_SHORT_TEXT)
                     .setShortText(ComplicationText.plainText(bodyStr))
-                    .setShortTitle(ComplicationText.plainText("ТЕЛО"))
+                    .setShortTitle(ComplicationText.plainText(shortTitle))
                     .setIcon(icon)
                     .setTapAction(tapAction);
         } else if (type == ComplicationData.TYPE_RANGED_VALUE) {
@@ -197,13 +204,13 @@ public class ThermometerComplicationService extends Service {
                     .setRangedMinValue(minVal)
                     .setRangedMaxValue(maxVal)
                     .setShortText(ComplicationText.plainText(bodyStr))
-                    .setShortTitle(ComplicationText.plainText("ТЕЛО"))
+                    .setShortTitle(ComplicationText.plainText(shortTitle))
                     .setIcon(icon)
                     .setTapAction(tapAction);
         } else if (type == ComplicationData.TYPE_LONG_TEXT) {
             builder = new ComplicationData.Builder(ComplicationData.TYPE_LONG_TEXT)
-                    .setLongText(ComplicationText.plainText("Тело: " + bodyStr + " • Кожа: " + tempStr))
-                    .setLongTitle(ComplicationText.plainText("Термометр"))
+                    .setLongText(ComplicationText.plainText(longText))
+                    .setLongTitle(ComplicationText.plainText(longTitle))
                     .setIcon(icon)
                     .setTapAction(tapAction);
         } else if (type == ComplicationData.TYPE_ICON) {

@@ -568,6 +568,11 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         btnClearHistory.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                if (TempLogManager.getHistory(MainActivity.this).isEmpty()) {
+                    Toast.makeText(MainActivity.this, "Журнал уже пуст", Toast.LENGTH_SHORT).show();
+                    vibrateShort();
+                    return;
+                }
                 new AlertDialog.Builder(MainActivity.this)
                         .setTitle("Очистить журнал?")
                         .setMessage("Все сохранённые замеры будут удалены.")
@@ -603,6 +608,8 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
                 if (tempOffset > -2.0f) {
                     tempOffset = Math.round((tempOffset - 0.1f) * 10f) / 10f;
                     saveOffset();
+                } else {
+                    vibrateShort();
                 }
             }
         });
@@ -613,9 +620,27 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
                 if (tempOffset < 2.0f) {
                     tempOffset = Math.round((tempOffset + 0.1f) * 10f) / 10f;
                     saveOffset();
+                } else {
+                    vibrateShort();
                 }
             }
         });
+
+        if (tvOffsetVal != null) {
+            tvOffsetVal.setOnLongClickListener(new View.OnLongClickListener() {
+                @Override
+                public boolean onLongClick(View v) {
+                    if (tempOffset != 0.0f) {
+                        tempOffset = 0.0f;
+                        saveOffset();
+                        vibrateDouble();
+                        Toast.makeText(MainActivity.this, "Калибровка сброшена (0.0°)", Toast.LENGTH_SHORT).show();
+                        return true;
+                    }
+                    return false;
+                }
+            });
+        }
     }
 
     private void setMedTimer(int hours) {
@@ -861,7 +886,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
 
         if (tvSensorList != null) {
-            tvSensorList.setText("Xiaomi Watch 5 • Clinical v4.8.0");
+            tvSensorList.setText("Xiaomi Watch 5 • Clinical v4.9.0");
         }
     }
 
@@ -887,7 +912,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
                             }
                         } catch (Throwable ignored) {}
                     }
-                    thermalZonesDiscovered = true;
+                    thermalZonesDiscovered = (cachedSkinZone >= 0 || cachedCpuZone >= 0 || cachedBattZone >= 0);
                 }
 
                 if (cachedSkinZone >= 0) {
@@ -1045,8 +1070,14 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
     private void recalculateAndDisplay() {
         boolean hasValidAmbient = (lastAmbientTemp > 0.0f && lastAmbientTemp < 60.0f);
-        float ambientVal = hasValidAmbient ? lastAmbientTemp : 23.5f;
-        tvAmbientTemp.setText(hasValidAmbient ? formatTemp(ambientVal) : ("--.- " + (isFahrenheit ? "°F" : "°C")));
+        float ambientVal = hasValidAmbient ? lastAmbientTemp : (lastMeasuredRoom > 0 ? lastMeasuredRoom : 23.5f);
+        if (hasValidAmbient) {
+            tvAmbientTemp.setText(formatTemp(ambientVal));
+        } else if (lastMeasuredRoom > 0) {
+            tvAmbientTemp.setText(formatTemp(lastMeasuredRoom) + " (комн)");
+        } else {
+            tvAmbientTemp.setText("--.- " + (isFahrenheit ? "°F" : "°C"));
+        }
 
         float contactTemp = getCompensatedContactTemp();
 
@@ -1376,7 +1407,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
         if (!isOnWrist && directSkinTemp <= 0) {
             cancelMeasurement();
-            tvMeasureTip.setText("⚠️ Замер прерван: часы сняты с руки");
+            Toast.makeText(this, "⚠️ Замер прерван: часы сняты с руки", Toast.LENGTH_SHORT).show();
             vibrateShort();
             return;
         }
@@ -1879,7 +1910,9 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(0, 4, 0, 4);
+            float density = getResources().getDisplayMetrics().density;
+            int padV = Math.max(1, Math.round(4 * density));
+            row.setPadding(0, padV, 0, padV);
 
             TextView tvLeft = new TextView(this);
             tvLeft.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f));
@@ -2010,9 +2043,6 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             }
         }
 
-        if (mainScrollView != null) {
-            mainScrollView.requestFocus();
-        }
         uiHandler.removeCallbacks(this);
         uiHandler.post(this);
     }

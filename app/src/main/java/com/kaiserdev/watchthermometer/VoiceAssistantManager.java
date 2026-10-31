@@ -101,6 +101,32 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
         speak(phrase);
     }
 
+    public void speakRoom(float tempC, boolean isFahrenheit) {
+        if (!isReady || isMuted || tts == null) return;
+
+        int whole = (int) tempC;
+        int decimal = Math.round((tempC - whole) * 10f);
+        if (decimal == 10) { whole++; decimal = 0; }
+
+        String advice;
+        if (tempC < 18.0f) {
+            advice = "Прохладный микроклимат в помещении.";
+        } else if (tempC <= 24.5f) {
+            advice = "Комфортная температура воздуха.";
+        } else {
+            advice = "Тепло и душно. Рекомендуется проветрить комнату.";
+        }
+
+        String phrase;
+        if (decimal == 0) {
+            phrase = String.format(Locale.US, "Температура воздуха %d градусов. %s", whole, advice);
+        } else {
+            phrase = String.format(Locale.US, "Температура воздуха %d и %d. %s", whole, decimal, advice);
+        }
+
+        speak(phrase);
+    }
+
     public void speakWater(float tempC, boolean isFahrenheit) {
         if (!isReady || isMuted || tts == null) return;
 

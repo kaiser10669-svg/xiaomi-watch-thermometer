@@ -50,6 +50,13 @@ public class MedicationAlarmReceiver extends BroadcastReceiver {
                     chan.setVibrationPattern(new long[]{0, 250, 150, 250, 200, 450});
                     chan.enableLights(true);
                     chan.setLightColor(Color.CYAN);
+                    chan.setSound(
+                            android.provider.Settings.System.DEFAULT_NOTIFICATION_URI,
+                            new android.media.AudioAttributes.Builder()
+                                    .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION_EVENT)
+                                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                                    .build()
+                    );
                     nm.createNotificationChannel(chan);
                 }
 

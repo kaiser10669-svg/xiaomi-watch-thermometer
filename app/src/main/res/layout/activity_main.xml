@@ -639,14 +639,31 @@
                     android:layout_marginTop="6dp"
                     android:visibility="gone">
 
-                    <TextView
-                        android:id="@+id/tvTempleFixedResult"
+                    <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="36.6 °C"
-                        android:textColor="@color/green_temp"
-                        android:textSize="26sp"
-                        android:textStyle="bold" />
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:id="@+id/tvTempleFixedResult"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="36.6 °C"
+                            android:textColor="@color/green_temp"
+                            android:textSize="26sp"
+                            android:textStyle="bold" />
+
+                        <ImageButton
+                            android:id="@+id/btnSpeakTempleResult"
+                            android:layout_width="28dp"
+                            android:layout_height="28dp"
+                            android:background="@drawable/btn_circle_bg"
+                            android:src="@drawable/ic_volume_up"
+                            android:layout_marginStart="8dp"
+                            android:padding="4dp"
+                            android:contentDescription="Озвучить" />
+                    </LinearLayout>
 
                     <TextView
                         android:id="@+id/tvTempleResultBadge"
@@ -848,12 +865,62 @@
                     android:id="@+id/tvRoomCountdown"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Остывание от руки..."
+                    android:text="Остывание от руки... 60 сек"
                     android:textColor="@color/cyan_temp"
                     android:textSize="12sp"
                     android:textStyle="bold"
                     android:layout_marginTop="6dp"
                     android:visibility="gone" />
+
+                <!-- Room Result Layout -->
+                <LinearLayout
+                    android:id="@+id/layoutRoomResult"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:layout_marginTop="6dp"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:id="@+id/tvRoomFixedResult"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="23.5 °C"
+                            android:textColor="@color/cyan_temp"
+                            android:textSize="26sp"
+                            android:textStyle="bold" />
+
+                        <ImageButton
+                            android:id="@+id/btnSpeakRoomResult"
+                            android:layout_width="28dp"
+                            android:layout_height="28dp"
+                            android:background="@drawable/btn_circle_bg"
+                            android:src="@drawable/ic_volume_up"
+                            android:layout_marginStart="8dp"
+                            android:padding="4dp"
+                            android:contentDescription="Озвучить" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvRoomResultBadge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/badge_bg"
+                        android:text="✓ Комфортный микроклимат"
+                        android:textColor="@color/green_temp"
+                        android:textSize="9sp"
+                        android:textStyle="bold"
+                        android:padding="4dp"
+                        android:layout_marginTop="3dp"
+                        android:layout_marginBottom="6dp" />
+                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
 
@@ -1210,7 +1277,7 @@
             android:id="@+id/tvSensorList"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Xiaomi Watch 5 • Clinical v3.6.0"
+            android:text="Xiaomi Watch 5 • Clinical v3.7.0"
             android:textColor="@color/text_title"
             android:textSize="9sp"
             android:gravity="center" />

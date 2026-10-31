@@ -110,7 +110,17 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     private TextView tvTempleCountdown;
     private View layoutTempleResult;
     private TextView tvTempleFixedResult;
+    private ImageButton btnSpeakTempleResult;
     private TextView tvTempleResultBadge;
+
+    private View layoutRoomResult;
+    private TextView tvRoomFixedResult;
+    private TextView tvRoomResultBadge;
+    private ImageButton btnSpeakRoomResult;
+
+    private float lastMeasuredRoom = -1.0f;
+    private volatile boolean isPlugged = false;
+    private long lastHeartRateTimestampMs = 0;
 
     // Water Mode Views
     private TextView tvWaterTemp;
@@ -383,7 +393,13 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         tvTempleCountdown = (TextView) findViewById(R.id.tvTempleCountdown);
         layoutTempleResult = findViewById(R.id.layoutTempleResult);
         tvTempleFixedResult = (TextView) findViewById(R.id.tvTempleFixedResult);
+        btnSpeakTempleResult = (ImageButton) findViewById(R.id.btnSpeakTempleResult);
         tvTempleResultBadge = (TextView) findViewById(R.id.tvTempleResultBadge);
+
+        layoutRoomResult = findViewById(R.id.layoutRoomResult);
+        tvRoomFixedResult = (TextView) findViewById(R.id.tvRoomFixedResult);
+        tvRoomResultBadge = (TextView) findViewById(R.id.tvRoomResultBadge);
+        btnSpeakRoomResult = (ImageButton) findViewById(R.id.btnSpeakRoomResult);
 
         // Water
         tvWaterTemp = (TextView) findViewById(R.id.tvWaterTemp);
@@ -520,6 +536,30 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             @Override
             public void onClick(View v) { startRoomMeasurement(); }
         });
+
+        if (btnSpeakTempleResult != null) {
+            btnSpeakTempleResult.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    if (voiceAssistant != null && lastMeasuredBodyTemple > 0) {
+                        voiceAssistant.speakTemperature(lastMeasuredBodyTemple, isFahrenheit);
+                        vibrateTick();
+                    }
+                }
+            });
+        }
+
+        if (btnSpeakRoomResult != null) {
+            btnSpeakRoomResult.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    if (voiceAssistant != null && lastMeasuredRoom > 0) {
+                        voiceAssistant.speakRoom(lastMeasuredRoom, isFahrenheit);
+                        vibrateTick();
+                    }
+                }
+            });
+        }
 
         // Pill / Medication Timers
         btnTimer4h.setOnClickListener(new View.OnClickListener() {
@@ -786,7 +826,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             }
         }
 
-        tvSensorList.setText("Аппаратный датчик: sdm-skin-therm • v3.6.0");
+        tvSensorList.setText("Аппаратный датчик: sdm-skin-therm • v3.7.0");
     }
 
     private void pollThermalSources() {
@@ -845,7 +885,9 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             Intent bi = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
             if (bi != null) {
                 int status = bi.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+                int plugged = bi.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0);
                 isCharging = (status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL);
+                isPlugged = (plugged != 0);
                 int temp = bi.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1);
                 if (temp > 0) {
                     lastBatteryTemp = temp / 10.0f;
@@ -894,10 +936,16 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             raw -= cpuExcess * 0.08f;
         }
 
+        // Internal hardware self-heating attenuation:
+        // If battery or motherboard is warm (> 36.0°C), excess heat is internal device dissipation
+        if (directSkinTemp <= 0 && raw > 36.0f) {
+            raw = 36.0f + (raw - 36.0f) * 0.20f;
+        }
+
         // PPG Heart Rate Vasodilation Compensation:
         // Elevated heart rate (> 75 bpm) dilates peripheral capillaries, warming wrist skin
-        if (isOnWrist && lastHeartRateBpm > 75.0f) {
-            float vasoOffset = Math.min(0.60f, (lastHeartRateBpm - 75.0f) * 0.008f);
+        if (isOnWrist && lastHeartRateBpm > 75.0f && lastHeartRateBpm <= 200.0f) {
+            float vasoOffset = Math.min(0.50f, (lastHeartRateBpm - 75.0f) * 0.007f);
             raw -= vasoOffset;
         }
 
@@ -907,7 +955,9 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     public void updateBatteryTemp(Intent intent) {
         if (intent == null) return;
         int status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+        int plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0);
         isCharging = (status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL);
+        isPlugged = (plugged != 0);
         int temp = intent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1);
         if (temp > 0) {
             lastBatteryTemp = temp / 10.0f;
@@ -969,40 +1019,69 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
         float contactTemp = getCompensatedContactTemp();
 
-        // --- Water Mode Preview ---
-        float waterPreview = hardwareSkinTemp > 0 ? hardwareSkinTemp : contactTemp;
-        tvWaterTemp.setText(formatTemp(waterPreview));
-        updateWaterBadge(waterPreview);
-
-        // --- Room Mode Processing ---
-        float roomEstimate = (!isOnWrist && !isCharging && contactTemp > 10.0f && contactTemp < 35.0f)
-                ? contactTemp
-                : ambientVal;
-        tvRoomTemp.setText(formatTemp(roomEstimate));
-        if (roomEstimate < 18.0f) {
-            tvRoomStatus.setText("Прохладный микроклимат");
-        } else if (roomEstimate <= 24.5f) {
-            tvRoomStatus.setText("✓ Комфортная температура");
+        // --- Water Mode Display ---
+        if (isWaterMeasuring) {
+            float waterSample = hardwareSkinTemp > 0 ? hardwareSkinTemp : (directSkinTemp > 0 ? directSkinTemp : (lastBatteryTemp > 0 ? lastBatteryTemp : 28.0f));
+            tvWaterTemp.setText(formatTemp(waterSample));
+            updateWaterBadge(waterSample);
+        } else if (lastMeasuredWater > 0 && lastMeasuredWater != 37.0f) {
+            tvWaterTemp.setText(formatTemp(lastMeasuredWater));
+            updateWaterBadge(lastMeasuredWater);
         } else {
-            tvRoomStatus.setText("Тёплое / душное помещение");
+            tvWaterTemp.setText("--.- " + (isFahrenheit ? "°F" : "°C"));
+            if (tvWaterBadge != null) {
+                tvWaterBadge.setText("🌊 Готов к замеру воды");
+                tvWaterBadge.setTextColor(Color.parseColor("#00E5FF"));
+            }
         }
 
-        // --- Temple Mode Live Preview ---
-        float liveTempleSkin = contactTemp;
-        float liveTempleBody = liveTempleSkin + 1.25f + tempOffset;
-        if (liveTempleBody < 34.0f) liveTempleBody = 34.0f;
-        if (liveTempleBody > 42.0f) liveTempleBody = 42.0f;
-        liveTempleBody = Math.round(liveTempleBody * 10f) / 10f;
-        tvTempleTemp.setText(formatTemp(liveTempleBody));
-        if (mercuryViewTemple != null) {
-            mercuryViewTemple.setTemperature(liveTempleBody, true);
+        // --- Room Mode Display ---
+        if (isRoomMeasuring) {
+            float liveRoom = (!isOnWrist && !isCharging && contactTemp > 10.0f && contactTemp < 38.0f) ? contactTemp : ambientVal;
+            tvRoomTemp.setText(formatTemp(liveRoom));
+            updateRoomStatus(liveRoom);
+        } else if (lastMeasuredRoom > 0) {
+            tvRoomTemp.setText(formatTemp(lastMeasuredRoom));
+            updateRoomStatus(lastMeasuredRoom);
+        } else if (!isOnWrist && !isCharging && !isPlugged) {
+            float liveRoom = (contactTemp > 10.0f && contactTemp < 38.0f) ? contactTemp : ambientVal;
+            tvRoomTemp.setText(formatTemp(liveRoom));
+            updateRoomStatus(liveRoom);
+        } else {
+            tvRoomTemp.setText("--.- " + (isFahrenheit ? "°F" : "°C"));
+            if (tvRoomStatus != null) {
+                tvRoomStatus.setText("⚠️ Снимите часы и положите на стол для замера");
+                tvRoomStatus.setTextColor(Color.parseColor("#FFA000"));
+            }
+        }
+
+        // --- Temple Mode Display ---
+        if (isTempleMeasuring) {
+            float liveTempleSkin = contactTemp;
+            float liveTempleBody = liveTempleSkin + 1.25f + tempOffset;
+            if (liveTempleBody < 34.0f) liveTempleBody = 34.0f;
+            if (liveTempleBody > 42.0f) liveTempleBody = 42.0f;
+            liveTempleBody = Math.round(liveTempleBody * 10f) / 10f;
+            tvTempleTemp.setText(formatTemp(liveTempleBody));
+            if (mercuryViewTemple != null) {
+                mercuryViewTemple.setTemperature(liveTempleBody, true);
+            }
+        } else if (lastMeasuredBodyTemple > 0 && lastMeasuredBodyTemple != 36.6f) {
+            tvTempleTemp.setText(formatTemp(lastMeasuredBodyTemple));
+            if (mercuryViewTemple != null) {
+                mercuryViewTemple.setTemperature(lastMeasuredBodyTemple, true);
+            }
+        } else {
+            tvTempleTemp.setText("--.- " + (isFahrenheit ? "°F" : "°C"));
+            if (mercuryViewTemple != null) {
+                mercuryViewTemple.setTemperature(34.0f, true);
+            }
         }
 
         // --- Wrist Mode Processing ---
-        // Physical off-body detection: On wrist if sensor reports on-wrist,
-        // OR PPG pulse detected (>= 40 bpm), OR temperature exceeds room baseline (>= 22.0°C)
-        boolean hasHeartRatePulse = (lastHeartRateBpm >= 40.0f);
-        boolean reallyOnWrist = (isOnWrist || hasHeartRatePulse) && (contactTemp >= 22.0f || directSkinTemp > 0 || hasHeartRatePulse);
+        long now = System.currentTimeMillis();
+        boolean hasHeartRatePulse = (lastHeartRateBpm >= 40.0f && (now - lastHeartRateTimestampMs < 8000));
+        boolean reallyOnWrist = !isPlugged && !isCharging && (isOnWrist || hasHeartRatePulse) && (contactTemp >= 22.0f);
         if (!reallyOnWrist) {
             kalmanSkin.reset(-100.0f);
             kalmanBody.reset(-100.0f);
@@ -1011,15 +1090,23 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             currentCalculatedBody = 35.0f;
             tvSkinTemp.setText("--.- " + (isFahrenheit ? "°F" : "°C"));
             tvSkinTemp.setTextColor(Color.parseColor("#78909C"));
-            tvSkinStatus.setText("⚠️ СНЯТЫ С РУКИ • Наденьте часы");
-            tvSkinStatus.setTextColor(Color.parseColor("#FFA000"));
+
+            if (isPlugged || isCharging) {
+                tvSkinStatus.setText("⚡ На зарядке • Снимите для замера");
+                tvSkinStatus.setTextColor(Color.parseColor("#00E5FF"));
+            } else {
+                tvSkinStatus.setText("⚠️ СНЯТЫ С РУКИ • Наденьте часы");
+                tvSkinStatus.setTextColor(Color.parseColor("#FFA000"));
+            }
+
             if (tvSensorDetail != null) {
-                tvSensorDetail.setText(String.format(Locale.US, "Корпус часов: %s • Среда: %s", formatTemp(contactTemp), formatTemp(ambientVal)));
+                tvSensorDetail.setText(String.format(Locale.US, "Корпус: %s • Среда: %s", formatTemp(contactTemp), formatTemp(ambientVal)));
             }
             if (mercuryViewWrist != null) {
                 mercuryViewWrist.setTemperature(34.0f, true);
             }
             updateThermalBalance(contactTemp, ambientVal);
+            updateFeverAdvisorOffbody();
             return;
         }
 
@@ -1028,7 +1115,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         float filteredSkin = kalmanSkin.update(contactTemp);
 
         // Circadian Baseline & Harmonic Computation
-        long now = System.currentTimeMillis();
+        now = System.currentTimeMillis();
         float circadianBase = CircadianModel.getBaseline(now);
 
         // Smooth bounded non-linear environmental compensation (tanh saturation, max ±0.45°C)
@@ -1095,6 +1182,35 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         updateSparkline(filteredBody);
         updateThermalBalance(filteredSkin, ambientVal);
         updateFeverAdvisor(filteredBody);
+    }
+
+    private void updateRoomStatus(float roomTemp) {
+        if (tvRoomStatus == null) return;
+        if (roomTemp < 18.0f) {
+            tvRoomStatus.setText("❄️ Прохладный микроклимат");
+            tvRoomStatus.setTextColor(Color.parseColor("#00E5FF"));
+        } else if (roomTemp <= 24.5f) {
+            tvRoomStatus.setText("✓ Комфортная температура");
+            tvRoomStatus.setTextColor(Color.parseColor("#00E676"));
+        } else {
+            tvRoomStatus.setText("🔥 Тёплое / душное помещение");
+            tvRoomStatus.setTextColor(Color.parseColor("#FF9100"));
+        }
+    }
+
+    private void updateFeverAdvisorOffbody() {
+        if (tvAdvisorStatus == null || tvAdvisorAdvice == null) return;
+        List<TempLogManager.Entry> history = TempLogManager.getHistory(this);
+        if (!history.isEmpty() && (history.get(0).mode == 0 || history.get(0).mode == 1)) {
+            TempLogManager.Entry last = history.get(0);
+            tvAdvisorStatus.setText("Предыдущий замер: " + formatTempShort(last.tempBody));
+            tvAdvisorStatus.setTextColor(Color.parseColor("#9E9E9E"));
+            tvAdvisorAdvice.setText("Для обновления советов и свежей температуры наденьте часы на руку.");
+        } else {
+            tvAdvisorStatus.setText("ℹ️ Ожидание замера");
+            tvAdvisorStatus.setTextColor(Color.parseColor("#9E9E9E"));
+            tvAdvisorAdvice.setText("Наденьте часы на руку или выполните замер на виске.");
+        }
     }
 
     private void updateWaterBadge(float tempC) {
@@ -1560,6 +1676,32 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             btnStartRoomMeasure.setVisibility(View.VISIBLE);
 
             float ambientVal = lastAmbientTemp > 0 ? lastAmbientTemp : (lastBatteryTemp > 0 ? lastBatteryTemp - 2.5f : 24.0f);
+            ambientVal = Math.round(ambientVal * 10f) / 10f;
+            lastMeasuredRoom = ambientVal;
+
+            if (layoutRoomResult != null) {
+                layoutRoomResult.setVisibility(View.VISIBLE);
+            }
+            if (tvRoomFixedResult != null) {
+                tvRoomFixedResult.setText(formatTemp(ambientVal));
+            }
+            if (tvRoomResultBadge != null) {
+                if (ambientVal < 18.0f) {
+                    tvRoomResultBadge.setText("❄️ Прохладный микроклимат");
+                    tvRoomResultBadge.setTextColor(Color.parseColor("#00E5FF"));
+                } else if (ambientVal <= 24.5f) {
+                    tvRoomResultBadge.setText("✓ Комфортный микроклимат");
+                    tvRoomResultBadge.setTextColor(Color.parseColor("#00E676"));
+                } else {
+                    tvRoomResultBadge.setText("🔥 Тёплое / душное помещение");
+                    tvRoomResultBadge.setTextColor(Color.parseColor("#FF9100"));
+                }
+            }
+
+            if (voiceAssistant != null) {
+                voiceAssistant.speakRoom(ambientVal, isFahrenheit);
+            }
+
             TempLogManager.saveRecord(this, ambientVal, ambientVal, 3);
             updateHistoryView();
         }
@@ -1811,6 +1953,10 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
         if (type == 34 || name.contains("offbody") || strType.contains("offbody")) {
             isOnWrist = (value > 0.5f);
+            if (!isOnWrist) {
+                lastHeartRateBpm = -1.0f;
+                lastHeartRateTimestampMs = 0;
+            }
             recalculateAndDisplay();
             return;
         }
@@ -1818,6 +1964,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         if (type == Sensor.TYPE_HEART_RATE || type == 21 || name.contains("heart_rate")) {
             if (value >= 35.0f && value <= 220.0f) {
                 lastHeartRateBpm = value;
+                lastHeartRateTimestampMs = System.currentTimeMillis();
                 recalculateAndDisplay();
             }
             return;

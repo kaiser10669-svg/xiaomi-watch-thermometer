@@ -22,7 +22,7 @@ public class TempLogManager {
         public long timestamp;
         public float tempBody;
         public float tempSkin;
-        public int mode; // 0=wrist, 1=temple, 2=water, 3=room
+        public int mode; // 0=wrist, 1=temple, 2=room
         public float deltaPrev; // difference to previous record in Celsius
 
         public String getFormattedTime() {
@@ -138,24 +138,36 @@ public class TempLogManager {
             return report;
         }
 
+        long now = System.currentTimeMillis();
+        long window24h = 24 * 3600 * 1000L;
         List<Entry> bodyHistory = new ArrayList<>();
+        int allBodyCount = 0;
         float minC = Float.MAX_VALUE;
         float maxC = -Float.MAX_VALUE;
         float sumC = 0;
 
         for (Entry e : history) {
             if (e.mode == 0 || e.mode == 1) { // Wrist or Temple body readings
-                bodyHistory.add(e);
-                minC = Math.min(minC, e.tempBody);
-                maxC = Math.max(maxC, e.tempBody);
-                sumC += e.tempBody;
+                allBodyCount++;
+                if (now - e.timestamp <= window24h) {
+                    bodyHistory.add(e);
+                    minC = Math.min(minC, e.tempBody);
+                    maxC = Math.max(maxC, e.tempBody);
+                    sumC += e.tempBody;
+                }
             }
         }
 
         if (bodyHistory.isEmpty()) {
-            report.statusSummary = "Только замеры воздуха";
-            report.trendStr = "—";
-            report.formattedReport = "В журнале пока нет замеров температуры тела.";
+            if (allBodyCount > 0) {
+                report.statusSummary = "Нет замеров за последние 24ч";
+                report.trendStr = "—";
+                report.formattedReport = "В журнале нет замеров за последние 24 часа.\nСделайте свежий замер температуры.";
+            } else {
+                report.statusSummary = "Только замеры воздуха";
+                report.trendStr = "—";
+                report.formattedReport = "В журнале пока нет замеров температуры тела.\nСделайте замер на руке или виске.";
+            }
             return report;
         }
 
@@ -165,17 +177,17 @@ public class TempLogManager {
 
         String unit = isFahrenheit ? "°F" : "°C";
 
-        // Clinical body trend calculation (comparing latest body reading to oldest in window)
+        // Clinical body trend calculation (comparing latest body reading to oldest in 24h window)
         Entry latest = bodyHistory.get(0);
         Entry oldest = bodyHistory.get(Math.min(bodyHistory.size() - 1, 4));
         float trendDelta = Math.round((latest.tempBody - oldest.tempBody) * 10f) / 10f;
         float dispTrend = isFahrenheit ? (trendDelta * 1.8f) : trendDelta;
         if (trendDelta >= 0.3f) {
-            report.trendStr = String.format(Locale.US, "Подъём (+%.1f %s)", dispTrend, unit);
+            report.trendStr = String.format(Locale.US, "Подъём (+%.1f %s↑)", dispTrend, unit);
         } else if (trendDelta <= -0.3f) {
-            report.trendStr = String.format(Locale.US, "Снижение (%.1f %s)", dispTrend, unit);
+            report.trendStr = String.format(Locale.US, "Снижение (%.1f %s↓)", Math.abs(dispTrend), unit);
         } else {
-            report.trendStr = "Стабильная динамика";
+            report.trendStr = "Стабильная динамика (=)";
         }
 
         if (maxC > 38.5f) {
@@ -190,18 +202,19 @@ public class TempLogManager {
             report.statusSummary = "В пределах нормы";
         }
 
-        // Format for on-screen Dialog
+        // Format for on-screen Dialog and Clipboard Export
         float dispMin = isFahrenheit ? (minC * 1.8f + 32f) : minC;
         float dispMax = isFahrenheit ? (maxC * 1.8f + 32f) : maxC;
         float dispAvg = isFahrenheit ? (report.avgTemp * 1.8f + 32f) : report.avgTemp;
 
         StringBuilder sb = new StringBuilder();
-        sb.append("📊 Статус: ").append(report.statusSummary).append("\n\n");
+        sb.append("📊 Клиническая сводка (24ч)\n");
+        sb.append("• Статус: ").append(report.statusSummary).append("\n");
         sb.append(String.format(Locale.US, "• Максимум: %.1f %s\n", dispMax, unit));
         sb.append(String.format(Locale.US, "• Средняя:  %.1f %s\n", dispAvg, unit));
-        sb.append(String.format(Locale.US, "• Минимум:  %.1f %s\n\n", dispMin, unit));
+        sb.append(String.format(Locale.US, "• Минимум:  %.1f %s\n", dispMin, unit));
         sb.append("• Динамика: ").append(report.trendStr).append("\n");
-        sb.append("• Замеров тела: ").append(bodyHistory.size());
+        sb.append("• Замеров за 24ч: ").append(bodyHistory.size());
 
         report.formattedReport = sb.toString();
         return report;

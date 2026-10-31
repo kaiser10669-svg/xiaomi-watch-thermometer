@@ -458,7 +458,7 @@
 
                         android:layout_width="wrap_content"
 
-                        android:layout_height="28dp"
+                        android:layout_height="30dp"
 
                         android:background="@drawable/btn_secondary_bg"
 
@@ -1070,7 +1070,7 @@
 
                     android:layout_width="match_parent"
 
-                    android:layout_height="24dp"
+                    android:layout_height="30dp"
 
                     android:background="@drawable/btn_secondary_bg"
 
@@ -1312,7 +1312,7 @@
 
                     android:layout_width="match_parent"
 
-                    android:layout_height="24dp"
+                    android:layout_height="30dp"
 
                     android:background="@drawable/btn_secondary_bg"
 
@@ -1562,7 +1562,7 @@
 
                 android:layout_width="match_parent"
 
-                android:layout_height="26dp"
+                android:layout_height="32dp"
 
                 android:orientation="horizontal">
 
@@ -1582,7 +1582,7 @@
 
                     android:textColor="#FFFFFF"
 
-                    android:textSize="8sp"
+                    android:textSize="9sp"
 
                     android:padding="0dp"
 
@@ -1604,7 +1604,7 @@
 
                     android:textColor="#FFFFFF"
 
-                    android:textSize="8sp"
+                    android:textSize="9sp"
 
                     android:padding="0dp"
 
@@ -1614,7 +1614,7 @@
 
                     android:id="@+id/btnTimerReset"
 
-                    android:layout_width="40dp"
+                    android:layout_width="44dp"
 
                     android:layout_height="match_parent"
 
@@ -1624,7 +1624,7 @@
 
                     android:textColor="#FF5252"
 
-                    android:textSize="9sp"
+                    android:textSize="10sp"
 
                     android:padding="0dp" />
 

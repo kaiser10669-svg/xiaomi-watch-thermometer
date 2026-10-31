@@ -7,6 +7,8 @@ import android.app.AlertDialog;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -131,6 +133,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     private TextView tvRoomCountdown;
 
     // Fever Advisor & Med Timer Views
+    private View layoutFeverAdvisor;
     private TextView tvAdvisorStatus;
     private TextView tvAdvisorAdvice;
     private TextView tvMedTimerCountdown;
@@ -392,6 +395,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         tvRoomCountdown = (TextView) findViewById(R.id.tvRoomCountdown);
 
         // Fever Advisor & Med Timer
+        layoutFeverAdvisor = findViewById(R.id.layoutFeverAdvisor);
         tvAdvisorStatus = (TextView) findViewById(R.id.tvAdvisorStatus);
         tvAdvisorAdvice = (TextView) findViewById(R.id.tvAdvisorAdvice);
         tvMedTimerCountdown = (TextView) findViewById(R.id.tvMedTimerCountdown);
@@ -478,7 +482,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             @Override
             public void onClick(View v) {
                 if (voiceAssistant != null && lastMeasuredBodyWrist > 30.0f) {
-                    voiceAssistant.speakTemperature(lastMeasuredBodyWrist, isFahrenheit);
+                    voiceAssistant.speakTemperature(lastMeasuredBodyWrist, isFahrenheit, true);
                     vibrateTick();
                 }
             }
@@ -517,7 +521,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
                 @Override
                 public void onClick(View v) {
                     if (voiceAssistant != null && lastMeasuredBodyTemple > 0) {
-                        voiceAssistant.speakTemperature(lastMeasuredBodyTemple, isFahrenheit);
+                        voiceAssistant.speakTemperature(lastMeasuredBodyTemple, isFahrenheit, true);
                         vibrateTick();
                     }
                 }
@@ -529,7 +533,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
                 @Override
                 public void onClick(View v) {
                     if (voiceAssistant != null && lastMeasuredRoom > 0) {
-                        voiceAssistant.speakRoom(lastMeasuredRoom, isFahrenheit);
+                        voiceAssistant.speakRoom(lastMeasuredRoom, isFahrenheit, true);
                         vibrateTick();
                     }
                 }
@@ -679,6 +683,13 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
         long diff = target - System.currentTimeMillis();
         if (diff <= 0) {
+            if (diff < -7200000L) { // Expired more than 2h ago -> auto-clear stale timer
+                getSharedPreferences(ThermometerComplicationService.PREFS_NAME, Context.MODE_PRIVATE)
+                        .edit().remove(PREF_MED_TIMER_TARGET).apply();
+                tvMedTimerCountdown.setText("Таймер не активен");
+                tvMedTimerCountdown.setTextColor(Color.parseColor("#9E9E9E"));
+                return;
+            }
             tvMedTimerCountdown.setText("✓ Пора принять лекарство!");
             tvMedTimerCountdown.setTextColor(Color.parseColor("#00E676"));
         } else {
@@ -721,6 +732,12 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             btnUnitToggle.setText(isFahrenheit ? "°F" : "°C");
             btnUnitToggle.setTextColor(isFahrenheit ? Color.parseColor("#FF7A00") : Color.parseColor("#00E5FF"));
         }
+        if (mercuryViewWrist != null) {
+            mercuryViewWrist.setFahrenheit(isFahrenheit);
+        }
+        if (mercuryViewTemple != null) {
+            mercuryViewTemple.setFahrenheit(isFahrenheit);
+        }
     }
 
     private void switchMode(int mode) {
@@ -746,14 +763,17 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             btnTabWrist.setBackgroundResource(R.drawable.tab_selected_bg);
             btnTabWrist.setTextColor(Color.WHITE);
             layoutWristMode.setVisibility(View.VISIBLE);
+            if (layoutFeverAdvisor != null) layoutFeverAdvisor.setVisibility(View.VISIBLE);
         } else if (mode == 1) {
             btnTabTemple.setBackgroundResource(R.drawable.tab_selected_bg);
             btnTabTemple.setTextColor(Color.WHITE);
             layoutTempleMode.setVisibility(View.VISIBLE);
+            if (layoutFeverAdvisor != null) layoutFeverAdvisor.setVisibility(View.VISIBLE);
         } else {
             btnTabRoom.setBackgroundResource(R.drawable.tab_selected_bg);
             btnTabRoom.setTextColor(Color.WHITE);
             layoutRoomMode.setVisibility(View.VISIBLE);
+            if (layoutFeverAdvisor != null) layoutFeverAdvisor.setVisibility(View.GONE);
         }
 
         recalculateAndDisplay();
@@ -827,7 +847,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
 
         if (tvSensorList != null) {
-            tvSensorList.setText("Xiaomi Watch 5 • Clinical v4.3.0");
+            tvSensorList.setText("Xiaomi Watch 5 • Clinical v4.4.0");
         }
     }
 
@@ -968,6 +988,12 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         if (Math.abs(displayedBodyTemp - targetTemp) < 0.05f) {
             tvSkinTemp.setText(formatTemp(targetTemp));
             displayedBodyTemp = targetTemp;
+            return;
+        }
+
+        if (currentMode != 0) {
+            displayedBodyTemp = targetTemp;
+            tvSkinTemp.setText(formatTemp(targetTemp));
             return;
         }
 
@@ -1528,6 +1554,12 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             cancelTempleMeasurement();
             return;
         }
+        if (isOnWrist) {
+            cancelTempleMeasurement();
+            if (tvTempleStatus != null) tvTempleStatus.setText("⚠️ Замер прерван: часы надеты на руку");
+            vibrateShort();
+            return;
+        }
 
         templeSecondsLeft--;
         vibrateTick();
@@ -1648,6 +1680,12 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             cancelRoomMeasurement();
             return;
         }
+        if (isOnWrist) {
+            cancelRoomMeasurement();
+            if (tvRoomStatus != null) tvRoomStatus.setText("⚠️ Замер прерван: часы надеты на руку");
+            vibrateShort();
+            return;
+        }
         roomSecondsLeft--;
         tvRoomCountdown.setText("Замер воздуха: " + roomSecondsLeft + " сек...");
 
@@ -1658,8 +1696,8 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             isRoomMeasuring = false;
             vibrateDouble();
             if (btnCancelRoomMeasure != null) btnCancelRoomMeasure.setVisibility(View.GONE);
+            if (tvRoomCountdown != null) tvRoomCountdown.setVisibility(View.GONE);
             if (tvRoomStatus != null) tvRoomStatus.setText("✓ Микроклимат определён");
-            tvRoomCountdown.setText("✓ Замер зафиксирован");
             btnStartRoomMeasure.setText("⏱️ Повторить замер воздуха");
             btnStartRoomMeasure.setVisibility(View.VISIBLE);
 
@@ -1700,12 +1738,26 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         if (clinicalDialog != null && clinicalDialog.isShowing()) {
             clinicalDialog.dismiss();
         }
-        TempLogManager.ClinicalReport report = TempLogManager.buildClinicalReport(this, isFahrenheit);
+        final TempLogManager.ClinicalReport report = TempLogManager.buildClinicalReport(this, isFahrenheit);
 
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("📊 Сводка за 24 часа");
         builder.setMessage(report.formattedReport);
         builder.setPositiveButton("Понятно", null);
+        builder.setNeutralButton("Скопировать", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                try {
+                    ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                    if (cm != null) {
+                        ClipData clip = ClipData.newPlainText("ClinicalReport", report.formattedReport);
+                        cm.setPrimaryClip(clip);
+                        Toast.makeText(MainActivity.this, "📋 Сводка скопирована в буфер", Toast.LENGTH_SHORT).show();
+                        vibrateTick();
+                    }
+                } catch (Throwable ignored) {}
+            }
+        });
         clinicalDialog = builder.create();
         clinicalDialog.show();
     }
@@ -1746,7 +1798,9 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             TextView tvRight = new TextView(this);
             String deltaStr = "";
             float dVal = isFahrenheit ? (e.deltaPrev * 1.8f) : e.deltaPrev;
-            if (e.deltaPrev > 0.05f) {
+            if (i == entries.size() - 1 && Math.abs(e.deltaPrev) < 0.05f) {
+                deltaStr = " (база)";
+            } else if (e.deltaPrev > 0.05f) {
                 deltaStr = String.format(Locale.US, " (+%.1f°↑)", dVal);
             } else if (e.deltaPrev < -0.05f) {
                 deltaStr = String.format(Locale.US, " (-%.1f°↓)", Math.abs(dVal));

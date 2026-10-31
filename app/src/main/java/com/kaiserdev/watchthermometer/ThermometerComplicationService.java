@@ -17,6 +17,9 @@ import android.os.RemoteException;
 import android.support.wearable.complications.ComplicationData;
 import android.support.wearable.complications.ComplicationText;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
 import java.util.Locale;
 
 public class ThermometerComplicationService extends Service {
@@ -69,6 +72,24 @@ public class ThermometerComplicationService extends Service {
         return mBinder;
     }
 
+    private static float readDirectSysfsSkinTemp() {
+        try {
+            File f = new File("/sys/class/thermal/thermal_zone4/temp");
+            if (f.exists() && f.canRead()) {
+                BufferedReader br = new BufferedReader(new FileReader(f));
+                String line = br.readLine();
+                br.close();
+                if (line != null) {
+                    float raw = Float.parseFloat(line.trim());
+                    if (raw > 0) {
+                        return raw > 1000 ? raw / 1000.0f : (raw > 100 ? raw / 10.0f : raw);
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+        return -1.0f;
+    }
+
     private void handleUpdate(int complicationId, int type, IBinder manager) {
         if (manager == null) return;
 
@@ -79,35 +100,42 @@ public class ThermometerComplicationService extends Service {
         boolean isFahrenheit = sp.getBoolean("is_fahrenheit", false);
         long lastTime = sp.getLong(KEY_TIMESTAMP, 0);
 
-        // If no cache or older than 10 minutes, sample battery hardware gauge on the fly
+        // If no cache or older than 10 minutes, sample direct sysfs hardware zone or battery gauge on the fly
         if (skinTemp <= 0 || (System.currentTimeMillis() - lastTime > 600000)) {
-            try {
-                Intent bi = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
-                if (bi != null) {
-                    int status = bi.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
-                    int plugged = bi.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0);
-                    boolean isCharging = (status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL);
-                    boolean isPlugged = (plugged != 0);
+            float directZone = readDirectSysfsSkinTemp();
+            if (directZone >= 20.0f && directZone <= 45.0f) {
+                skinTemp = directZone;
+                float base = CircadianModel.getBaseline(System.currentTimeMillis());
+                bodyEst = base + (skinTemp - 33.0f) * 0.45f + tempOffset;
+            } else {
+                try {
+                    Intent bi = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+                    if (bi != null) {
+                        int status = bi.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+                        int plugged = bi.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0);
+                        boolean isCharging = (status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL);
+                        boolean isPlugged = (plugged != 0);
 
-                    // If watch is on charging dock, ignore hot battery readings to avoid false complication fever
-                    if (!isCharging && !isPlugged) {
-                        int btemp = bi.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1);
-                        if (btemp > 0) {
-                            float batteryC = btemp / 10.0f;
-                            if (batteryC >= 26.5f) {
-                                skinTemp = 32.1f + (batteryC - 28.0f) * 0.42f;
-                                if (skinTemp < 30.5f) skinTemp = 30.5f;
-                                if (skinTemp > 35.8f) skinTemp = 35.8f;
-                                float base = CircadianModel.getBaseline(System.currentTimeMillis());
-                                bodyEst = base + (skinTemp - 33.0f) * 0.42f + tempOffset;
-                            } else {
-                                skinTemp = batteryC;
-                                bodyEst = CircadianModel.getBaseline(System.currentTimeMillis()) + tempOffset;
+                        // If watch is on charging dock, ignore hot battery readings to avoid false complication fever
+                        if (!isCharging && !isPlugged) {
+                            int btemp = bi.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1);
+                            if (btemp > 0) {
+                                float batteryC = btemp / 10.0f;
+                                if (batteryC >= 26.5f) {
+                                    skinTemp = 32.1f + (batteryC - 28.0f) * 0.42f;
+                                    if (skinTemp < 30.5f) skinTemp = 30.5f;
+                                    if (skinTemp > 35.8f) skinTemp = 35.8f;
+                                    float base = CircadianModel.getBaseline(System.currentTimeMillis());
+                                    bodyEst = base + (skinTemp - 33.0f) * 0.42f + tempOffset;
+                                } else {
+                                    skinTemp = batteryC;
+                                    bodyEst = CircadianModel.getBaseline(System.currentTimeMillis()) + tempOffset;
+                                }
                             }
                         }
                     }
-                }
-            } catch (Exception ignored) {}
+                } catch (Exception ignored) {}
+            }
         }
 
         if (skinTemp <= 0) {
@@ -153,7 +181,7 @@ public class ThermometerComplicationService extends Service {
                     .setTapAction(tapAction);
         } else if (type == ComplicationData.TYPE_LONG_TEXT) {
             builder = new ComplicationData.Builder(ComplicationData.TYPE_LONG_TEXT)
-                    .setLongText(ComplicationText.plainText("Тело: " + bodyStr + " • Кожа " + tempStr))
+                    .setLongText(ComplicationText.plainText("Тело: " + bodyStr + " • Кожа: " + tempStr))
                     .setLongTitle(ComplicationText.plainText("Термометр"))
                     .setIcon(icon)
                     .setTapAction(tapAction);

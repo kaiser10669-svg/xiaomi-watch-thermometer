@@ -132,42 +132,86 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
         } catch (Throwable ignored) {}
     }
 
+    private boolean isRussianLocale() {
+        if (tts == null) return true;
+        try {
+            Locale cur = null;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                cur = tts.getVoice() != null ? tts.getVoice().getLocale() : null;
+            }
+            if (cur == null) {
+                cur = tts.getLanguage();
+            }
+            if (cur != null && cur.getLanguage() != null) {
+                return "ru".equalsIgnoreCase(cur.getLanguage());
+            }
+        } catch (Throwable ignored) {}
+        return true;
+    }
+
     public void speakTemperature(float tempC, boolean isFahrenheit) {
-        if (!isReady || isMuted || tts == null) return;
+        speakTemperature(tempC, isFahrenheit, false);
+    }
 
-        String statusPhrase;
-        if (tempC < 35.5f) {
-            statusPhrase = "Пониженная.";
-        } else if (tempC <= 37.2f) {
-            statusPhrase = "В пределах нормы!";
-        } else if (tempC <= 38.0f) {
-            statusPhrase = "Субфебрильная. Будьте внимательны.";
-        } else if (tempC <= 38.5f) {
-            statusPhrase = "Повышенная! Рекомендуется отдых и обильное питьё.";
-        } else {
-            statusPhrase = "Внимание! Лихорадка! Примите жаропонижающее.";
-        }
+    public void speakTemperature(float tempC, boolean isFahrenheit, boolean force) {
+        if (!isReady || (!force && isMuted) || tts == null) return;
 
+        boolean isRu = isRussianLocale();
         String phrase;
-        if (isFahrenheit) {
-            float f = tempC * 1.8f + 32f;
-            int whole = (int) f;
-            int decimal = Math.round((f - whole) * 10f);
-            if (decimal == 10) { whole++; decimal = 0; }
-            if (decimal == 0) {
-                phrase = String.format(Locale.US, "Температура %d градусов Фаренгейта. %s", whole, statusPhrase);
+        if (isRu) {
+            String statusPhrase;
+            if (tempC < 35.5f) {
+                statusPhrase = "Пониженная.";
+            } else if (tempC <= 37.2f) {
+                statusPhrase = "В пределах нормы!";
+            } else if (tempC <= 38.0f) {
+                statusPhrase = "Субфебрильная. Будьте внимательны.";
+            } else if (tempC <= 38.5f) {
+                statusPhrase = "Повышенная! Рекомендуется отдых и обильное питьё.";
             } else {
-                phrase = String.format(Locale.US, "Температура %d и %d градусов Фаренгейта. %s", whole, decimal, statusPhrase);
+                statusPhrase = "Внимание! Лихорадка! Примите жаропонижающее.";
+            }
+
+            if (isFahrenheit) {
+                float f = tempC * 1.8f + 32f;
+                int whole = (int) f;
+                int decimal = Math.round((f - whole) * 10f);
+                if (decimal == 10) { whole++; decimal = 0; }
+                if (decimal == 0) {
+                    phrase = String.format(Locale.US, "Температура %d градусов Фаренгейта. %s", whole, statusPhrase);
+                } else {
+                    phrase = String.format(Locale.US, "Температура %d и %d градусов Фаренгейта. %s", whole, decimal, statusPhrase);
+                }
+            } else {
+                int whole = (int) tempC;
+                int decimal = Math.round((tempC - whole) * 10f);
+                if (decimal == 10) { whole++; decimal = 0; }
+
+                if (decimal == 0) {
+                    phrase = String.format(Locale.US, "Температура %d ровно. %s", whole, statusPhrase);
+                } else {
+                    phrase = String.format(Locale.US, "Температура %d и %d. %s", whole, decimal, statusPhrase);
+                }
             }
         } else {
-            int whole = (int) tempC;
-            int decimal = Math.round((tempC - whole) * 10f);
-            if (decimal == 10) { whole++; decimal = 0; }
-
-            if (decimal == 0) {
-                phrase = String.format(Locale.US, "Температура %d ровно. %s", whole, statusPhrase);
+            String enStatus;
+            if (tempC < 35.5f) {
+                enStatus = "Low body temperature.";
+            } else if (tempC <= 37.2f) {
+                enStatus = "Normal temperature.";
+            } else if (tempC <= 38.0f) {
+                enStatus = "Mild elevation.";
+            } else if (tempC <= 38.5f) {
+                enStatus = "Moderate fever. Rest and drink fluids.";
             } else {
-                phrase = String.format(Locale.US, "Температура %d и %d. %s", whole, decimal, statusPhrase);
+                enStatus = "High fever! Please consult a physician.";
+            }
+
+            if (isFahrenheit) {
+                float f = tempC * 1.8f + 32f;
+                phrase = String.format(Locale.US, "Body temperature %.1f degrees Fahrenheit. %s", f, enStatus);
+            } else {
+                phrase = String.format(Locale.US, "Body temperature %.1f degrees Celsius. %s", tempC, enStatus);
             }
         }
 
@@ -175,33 +219,56 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
     }
 
     public void speakRoom(float tempC, boolean isFahrenheit) {
-        if (!isReady || isMuted || tts == null) return;
+        speakRoom(tempC, isFahrenheit, false);
+    }
 
-        String advice;
-        if (tempC < 18.0f) {
-            advice = "Прохладный микроклимат в помещении.";
-        } else if (tempC <= 24.5f) {
-            advice = "Комфортная температура воздуха.";
-        } else {
-            advice = "Тепло и душно. Рекомендуется проветрить комнату.";
-        }
+    public void speakRoom(float tempC, boolean isFahrenheit, boolean force) {
+        if (!isReady || (!force && isMuted) || tts == null) return;
 
+        boolean isRu = isRussianLocale();
         String phrase;
-        if (isFahrenheit) {
-            float f = tempC * 1.8f + 32f;
-            int whole = (int) f;
-            int decimal = Math.round((f - whole) * 10f);
-            if (decimal == 10) { whole++; decimal = 0; }
-            phrase = String.format(Locale.US, "Температура воздуха %d и %d градусов Фаренгейта. %s", whole, decimal, advice);
-        } else {
-            int whole = (int) tempC;
-            int decimal = Math.round((tempC - whole) * 10f);
-            if (decimal == 10) { whole++; decimal = 0; }
-
-            if (decimal == 0) {
-                phrase = String.format(Locale.US, "Температура воздуха %d градусов. %s", whole, advice);
+        if (isRu) {
+            String advice;
+            if (tempC < 18.0f) {
+                advice = "Прохладный микроклимат в помещении.";
+            } else if (tempC <= 24.5f) {
+                advice = "Комфортная температура воздуха.";
             } else {
-                phrase = String.format(Locale.US, "Температура воздуха %d и %d. %s", whole, decimal, advice);
+                advice = "Тепло и душно. Рекомендуется проветрить комнату.";
+            }
+
+            if (isFahrenheit) {
+                float f = tempC * 1.8f + 32f;
+                int whole = (int) f;
+                int decimal = Math.round((f - whole) * 10f);
+                if (decimal == 10) { whole++; decimal = 0; }
+                phrase = String.format(Locale.US, "Температура воздуха %d и %d градусов Фаренгейта. %s", whole, decimal, advice);
+            } else {
+                int whole = (int) tempC;
+                int decimal = Math.round((tempC - whole) * 10f);
+                if (decimal == 10) { whole++; decimal = 0; }
+
+                if (decimal == 0) {
+                    phrase = String.format(Locale.US, "Температура воздуха %d градусов. %s", whole, advice);
+                } else {
+                    phrase = String.format(Locale.US, "Температура воздуха %d и %d. %s", whole, decimal, advice);
+                }
+            }
+        } else {
+            String enAdvice;
+            if (tempC < 18.0f) {
+                enAdvice = "Cool room climate.";
+            } else if (tempC <= 24.5f) {
+                enAdvice = "Comfortable room temperature.";
+            } else {
+                enAdvice = "Warm and stuffy. Consider airing out.";
+            }
+
+            if (isFahrenheit) {
+                float f = tempC * 1.8f + 32f;
+                phrase = String.format(Locale.US, "Room temperature %.1f degrees Fahrenheit. %s", f, enAdvice);
+            } else {
+                phrase = String.format(Locale.US, "Room temperature %.1f degrees Celsius. %s", tempC, enAdvice);
             }
         }
 

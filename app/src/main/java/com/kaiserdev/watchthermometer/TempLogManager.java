@@ -18,6 +18,7 @@ public class TempLogManager {
     private static final String PREF_HISTORY_KEY = "temp_history_json";
     public static final int MAX_ENTRIES = 32;
     public static final float NO_DELTA = 999.0f;
+    private static List<Entry> sCachedHistory = null;
 
     public static class Entry {
         public long timestamp;
@@ -98,9 +99,13 @@ public class TempLogManager {
             } catch (Exception ignored) {}
         }
         sp.edit().putString(PREF_HISTORY_KEY, array.toString()).apply();
+        sCachedHistory = new ArrayList<>(history);
     }
 
     public static synchronized List<Entry> getHistory(Context context) {
+        if (sCachedHistory != null) {
+            return new ArrayList<>(sCachedHistory);
+        }
         List<Entry> list = new ArrayList<>();
         if (context == null) return list;
         SharedPreferences sp = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
@@ -118,10 +123,14 @@ public class TempLogManager {
                 list.add(e);
             }
         } catch (Exception ignored) {}
+        sCachedHistory = new ArrayList<>(list);
         return list;
     }
 
     public static synchronized void clearHistory(Context context) {
+        if (sCachedHistory != null) {
+            sCachedHistory.clear();
+        }
         if (context == null) return;
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .edit().remove(PREF_HISTORY_KEY).apply();

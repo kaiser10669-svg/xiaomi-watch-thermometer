@@ -886,7 +886,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
 
         if (tvSensorList != null) {
-            tvSensorList.setText("Xiaomi Watch 5 • Clinical v4.9.0");
+            tvSensorList.setText("Xiaomi Watch 5 • Clinical v5.0.0");
         }
     }
 
@@ -1012,6 +1012,15 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     }
 
     private void checkBatteryOverheat(float bTemp) {
+        if (tvBatteryTemp != null) {
+            if (bTemp >= 42.0f) {
+                tvBatteryTemp.setTextColor(Color.parseColor("#FF5252"));
+            } else if (bTemp >= 38.0f) {
+                tvBatteryTemp.setTextColor(Color.parseColor("#FF9100"));
+            } else {
+                tvBatteryTemp.setTextColor(Color.WHITE);
+            }
+        }
         if (layoutOverheat == null || tvOverheatMsg == null) return;
         if (bTemp >= 42.0f) {
             layoutOverheat.setVisibility(View.VISIBLE);
@@ -1333,7 +1342,11 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             tvDeltaT.setText(String.format(Locale.US, "%+.1f °C", delta));
         }
 
-        if (delta < 5.0f) {
+        if (amb > 28.0f && delta < 5.0f) {
+            tvThermalStatus.setText("☀️ Тепловая нагрузка среды");
+            tvThermalStatus.setTextColor(Color.parseColor("#FF9100"));
+            tvThermalDesc.setText("Затруднённая радиационная теплоотдача");
+        } else if (delta < 5.0f) {
             tvThermalStatus.setText("❄️ Спазм сосудов (озноб/холод)");
             tvThermalStatus.setTextColor(Color.parseColor("#00E5FF"));
             tvThermalDesc.setText("Периферические сосуды сужены");

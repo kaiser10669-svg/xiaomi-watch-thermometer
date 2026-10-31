@@ -226,6 +226,9 @@ public class MercuryThermometerView extends View {
         // Bulb glass specular highlight
         canvas.drawCircle(bulbCenterX - bulbRadius * 0.35f, bulbCenterY - bulbRadius * 0.35f, bulbRadius * 0.28f, glassReflectionPaint);
 
+        // Capillary tube glass specular reflection streak
+        canvas.drawLine(tubeStartX + dp(2f), tubeTop + dp(1.8f), tubeEndX - dp(4f), tubeTop + dp(1.8f), glassReflectionPaint);
+
         // Draw Scale Ticks and Labels below tube
         float scaleLength = tubeEndX - tubeStartX;
         float majorTickY1 = tubeBottom + dp(2f);

@@ -1,5 +1,6 @@
 package com.kaiserdev.watchthermometer;
 
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -24,6 +25,7 @@ import android.view.InputDevice;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
@@ -222,6 +224,13 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
     private float currentCalculatedSkin = -1.0f;
     private float currentCalculatedBody = -1.0f;
+
+    // v3.4.0 Apex Clinical Systems
+    private final KalmanFilter1D kalmanSkin = new KalmanFilter1D(0.008f, 0.12f);
+    private final KalmanFilter1D kalmanBody = new KalmanFilter1D(0.005f, 0.08f);
+    private float lastHeartRateBpm = -1.0f;
+    private float displayedBodyTemp = -1.0f;
+    private ValueAnimator tempAnimator;
 
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
 
@@ -1042,8 +1051,9 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             boolean isSkin = type == 65590 || name.contains("skin") || strType.contains("skin_temperature") || name.contains("body_temp");
             boolean isAmbient = type == Sensor.TYPE_AMBIENT_TEMPERATURE || type == 7 || (name.contains("ambient") && name.contains("temp")) || (name.contains("temp") && !name.contains("battery"));
             boolean isBaro = type == Sensor.TYPE_PRESSURE || name.contains("pressure") || name.contains("barometer");
+            boolean isHeartRate = type == Sensor.TYPE_HEART_RATE || type == 21 || name.contains("heart_rate");
 
-            if (isOffbody || isSkin || isAmbient || isBaro) {
+            if (isOffbody || isSkin || isAmbient || isBaro || isHeartRate) {
                 registeredSensors.add(s);
             }
         }
@@ -1132,6 +1142,13 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             raw -= cpuExcess * 0.10f; // 10% thermal coupling to watch base
         }
 
+        // PPG Heart Rate Vasodilation Compensation:
+        // Elevated heart rate (> 75 bpm) dilates peripheral capillaries, warming wrist skin
+        if (isOnWrist && lastHeartRateBpm > 75.0f) {
+            float vasoOffset = Math.min(0.60f, (lastHeartRateBpm - 75.0f) * 0.008f);
+            raw -= vasoOffset;
+        }
+
         return Math.round(raw * 10f) / 10f;
     }
 
@@ -1155,6 +1172,43 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         } else {
             layoutOverheat.setVisibility(View.GONE);
         }
+    }
+
+    private void animateBodyTempDisplay(final float targetTemp) {
+        if (displayedBodyTemp <= 0) {
+            displayedBodyTemp = targetTemp;
+            tvSkinTemp.setText(formatTemp(targetTemp));
+            return;
+        }
+
+        if (Math.abs(displayedBodyTemp - targetTemp) < 0.05f) {
+            tvSkinTemp.setText(formatTemp(targetTemp));
+            displayedBodyTemp = targetTemp;
+            return;
+        }
+
+        if (tempAnimator != null && tempAnimator.isRunning()) {
+            tempAnimator.cancel();
+        }
+
+        final float start = displayedBodyTemp;
+        tempAnimator = ValueAnimator.ofFloat(start, targetTemp);
+        tempAnimator.setDuration(350);
+        tempAnimator.setInterpolator(new DecelerateInterpolator());
+        tempAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            private float lastEmitted = start;
+            @Override
+            public void onAnimationUpdate(ValueAnimator animation) {
+                float val = (float) animation.getAnimatedValue();
+                displayedBodyTemp = val;
+                tvSkinTemp.setText(formatTemp(val));
+                if (Math.abs(val - lastEmitted) >= 0.1f) {
+                    lastEmitted = val;
+                    vibrateTick();
+                }
+            }
+        });
+        tempAnimator.start();
     }
 
     private void recalculateAndDisplay() {
@@ -1196,6 +1250,9 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         // Physical off-body detection
         boolean reallyOnWrist = isOnWrist && (contactTemp >= 28.0f || directSkinTemp > 0);
         if (!reallyOnWrist) {
+            kalmanSkin.reset(-1.0f);
+            kalmanBody.reset(-1.0f);
+            displayedBodyTemp = -1.0f;
             currentCalculatedSkin = contactTemp;
             currentCalculatedBody = 35.0f;
             tvSkinTemp.setText("--.- " + (isFahrenheit ? "°F" : "°C"));
@@ -1214,53 +1271,67 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
         // On-wrist Dual-Flux physiological model (Heat Flux Gradient Compensation)
         float calibratedSkin = contactTemp + tempOffset;
+        float filteredSkin = kalmanSkin.update(calibratedSkin);
+
+        // Circadian Baseline & Harmonic Computation
+        long now = System.currentTimeMillis();
+        float circadianBase = CircadianModel.getBaseline(now);
+
         float ambientDelta = (23.5f - ambientVal) * 0.14f;
-        float skinDelta = calibratedSkin - 33.0f;
-        float skinFactor = (calibratedSkin > 33.5f) ? 0.60f : 0.42f;
-        float calibratedBody = 36.6f + (skinDelta * skinFactor) + ambientDelta + tempOffset;
+        float skinDelta = filteredSkin - 33.0f;
+        float skinFactor = (filteredSkin > 33.5f) ? 0.60f : 0.42f;
+        float calculatedBody = circadianBase + (skinDelta * skinFactor) + ambientDelta + tempOffset;
 
         // Realistic safety bounds for human physiology (34.0 to 42.0)
-        if (calibratedBody < 34.0f) calibratedBody = 34.0f;
-        if (calibratedBody > 42.0f) calibratedBody = 42.0f;
+        if (calculatedBody < 34.0f) calculatedBody = 34.0f;
+        if (calculatedBody > 42.0f) calculatedBody = 42.0f;
 
-        currentCalculatedSkin = calibratedSkin;
-        currentCalculatedBody = Math.round(calibratedBody * 10f) / 10f;
+        float filteredBody = kalmanBody.update(calculatedBody);
+        filteredBody = Math.round(filteredBody * 10f) / 10f;
 
-        // Primary Display: Core Body Temperature in giant text
-        tvSkinTemp.setText(formatTemp(currentCalculatedBody));
+        currentCalculatedSkin = filteredSkin;
+        currentCalculatedBody = filteredBody;
 
-        // Clinical classification
-        if (currentCalculatedBody < 35.5f) {
+        // Circadian Deviation (Apple/Garmin Baseline Tracking)
+        float circadianDev = CircadianModel.getDeviation(filteredBody, now);
+        String devStr = CircadianModel.formatDeviation(circadianDev);
+
+        // Primary Display: Smooth kinetic odometer animation
+        animateBodyTempDisplay(filteredBody);
+
+        // Clinical classification + Circadian alignment
+        if (filteredBody < 35.5f) {
             tvSkinTemp.setTextColor(Color.parseColor("#00E5FF"));
-            tvSkinStatus.setText(String.format(Locale.US, "❄️ %s • Пониженная", formatTempShort(currentCalculatedBody)));
+            tvSkinStatus.setText(String.format(Locale.US, "❄️ %s • Пониженная (Ритм %s)", formatTempShort(filteredBody), devStr));
             tvSkinStatus.setTextColor(Color.parseColor("#00E5FF"));
-        } else if (currentCalculatedBody <= 37.2f) {
+        } else if (filteredBody <= 37.2f) {
             tvSkinTemp.setTextColor(Color.parseColor("#00E676"));
-            tvSkinStatus.setText(String.format(Locale.US, "✓ %s • В норме", formatTempShort(currentCalculatedBody)));
+            tvSkinStatus.setText(String.format(Locale.US, "✓ %s • В норме (Ритм %s)", formatTempShort(filteredBody), devStr));
             tvSkinStatus.setTextColor(Color.parseColor("#00E676"));
-        } else if (currentCalculatedBody <= 38.0f) {
+        } else if (filteredBody <= 38.0f) {
             tvSkinTemp.setTextColor(Color.parseColor("#FFD600"));
-            tvSkinStatus.setText(String.format(Locale.US, "⚠️ %s • Субфебрилитет", formatTempShort(currentCalculatedBody)));
+            tvSkinStatus.setText(String.format(Locale.US, "⚠️ %s • Субфебрилитет (%s к норме)", formatTempShort(filteredBody), devStr));
             tvSkinStatus.setTextColor(Color.parseColor("#FFD600"));
         } else {
             tvSkinTemp.setTextColor(Color.parseColor("#FF5252"));
-            tvSkinStatus.setText(String.format(Locale.US, "🔥 %s • Лихорадка!", formatTempShort(currentCalculatedBody)));
+            tvSkinStatus.setText(String.format(Locale.US, "🔥 %s • Лихорадка! (%s)", formatTempShort(filteredBody), devStr));
             tvSkinStatus.setTextColor(Color.parseColor("#FF5252"));
         }
 
         if (tvSensorDetail != null) {
-            tvSensorDetail.setText(String.format(Locale.US, "Кожа руки: %s • Среда: %s", 
-                    formatTemp(calibratedSkin), formatTemp(ambientVal)));
+            String hrStr = lastHeartRateBpm > 0 ? String.format(Locale.US, " • Пульс %d", Math.round(lastHeartRateBpm)) : "";
+            tvSensorDetail.setText(String.format(Locale.US, "Кожа: %s • База суток: %.1f°%s", 
+                    formatTemp(filteredSkin), circadianBase, hrStr));
         }
 
         if (mercuryViewWrist != null) {
-            mercuryViewWrist.setTemperature(currentCalculatedBody, true);
+            mercuryViewWrist.setTemperature(filteredBody, true);
         }
 
-        savePrefsAndUpdateComplication(calibratedSkin, currentCalculatedBody, ambientVal);
-        updateSparkline(currentCalculatedBody);
-        updateThermalBalance(calibratedSkin, ambientVal);
-        updateFeverAdvisor(currentCalculatedBody);
+        savePrefsAndUpdateComplication(filteredSkin, filteredBody, ambientVal);
+        updateSparkline(filteredBody);
+        updateThermalBalance(filteredSkin, ambientVal);
+        updateFeverAdvisor(filteredBody);
     }
 
     private void updateWaterBadge(float tempC) {
@@ -1433,53 +1504,59 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             }
         }
 
+        long now = System.currentTimeMillis();
+        float circadianBase = CircadianModel.getBaseline(now);
         float ambientVal = lastAmbientTemp > 0 ? lastAmbientTemp : 23.5f;
         float ambientDelta = (23.5f - ambientVal) * 0.14f;
         float skinDelta = finalSkin - 33.0f;
         float skinFactor = (finalSkin > 33.5f) ? 0.60f : 0.42f;
-        float finalBody = 36.6f + (skinDelta * skinFactor) + ambientDelta + tempOffset;
+        float finalBody = circadianBase + (skinDelta * skinFactor) + ambientDelta + tempOffset;
         if (finalBody < 34.0f) finalBody = 34.0f;
         if (finalBody > 42.0f) finalBody = 42.0f;
         finalBody = Math.round(finalBody * 10f) / 10f;
 
+        float circadianDev = CircadianModel.getDeviation(finalBody, now);
+        String devStr = CircadianModel.formatDeviation(circadianDev);
+
         lastMeasuredBodyWrist = finalBody;
         currentCalculatedBody = finalBody;
         tvFixedResult.setText(formatTemp(finalBody));
-        tvSkinTemp.setText(formatTemp(finalBody));
+        animateBodyTempDisplay(finalBody);
 
         if (finalBody < 35.5f) {
-            tvResultBadge.setText("Пониженная (Гипотермия)");
+            tvResultBadge.setText(String.format(Locale.US, "Пониженная (%s к ритму)", devStr));
             tvResultBadge.setTextColor(Color.parseColor("#00E5FF"));
             tvFixedResult.setTextColor(Color.parseColor("#00E5FF"));
             tvSkinTemp.setTextColor(Color.parseColor("#00E5FF"));
-            tvSkinStatus.setText(String.format(Locale.US, "❄️ %s • Пониженная", formatTempShort(finalBody)));
+            tvSkinStatus.setText(String.format(Locale.US, "❄️ %s • Пониженная (Ритм %s)", formatTempShort(finalBody), devStr));
             tvSkinStatus.setTextColor(Color.parseColor("#00E5FF"));
         } else if (finalBody <= 37.2f) {
-            tvResultBadge.setText("✓ Температура в норме");
+            tvResultBadge.setText(String.format(Locale.US, "✓ В норме (%s к ритму)", devStr));
             tvResultBadge.setTextColor(Color.parseColor("#00E676"));
             tvFixedResult.setTextColor(Color.parseColor("#00E676"));
             tvSkinTemp.setTextColor(Color.parseColor("#00E676"));
-            tvSkinStatus.setText(String.format(Locale.US, "✓ %s • В норме", formatTempShort(finalBody)));
+            tvSkinStatus.setText(String.format(Locale.US, "✓ %s • В норме (Ритм %s)", formatTempShort(finalBody), devStr));
             tvSkinStatus.setTextColor(Color.parseColor("#00E676"));
         } else if (finalBody <= 38.0f) {
-            tvResultBadge.setText("⚠ Субфебрильная");
+            tvResultBadge.setText(String.format(Locale.US, "⚠ Субфебрилитет (%s к норме)", devStr));
             tvResultBadge.setTextColor(Color.parseColor("#FFD600"));
             tvFixedResult.setTextColor(Color.parseColor("#FFD600"));
             tvSkinTemp.setTextColor(Color.parseColor("#FFD600"));
-            tvSkinStatus.setText(String.format(Locale.US, "⚠️ %s • Субфебрилитет", formatTempShort(finalBody)));
+            tvSkinStatus.setText(String.format(Locale.US, "⚠️ %s • Субфебрилитет (%s)", formatTempShort(finalBody), devStr));
             tvSkinStatus.setTextColor(Color.parseColor("#FFD600"));
         } else {
-            tvResultBadge.setText("🔥 Повышенная (Лихорадка)");
+            tvResultBadge.setText(String.format(Locale.US, "🔥 Лихорадка! (%s)", devStr));
             tvResultBadge.setTextColor(Color.parseColor("#FF5252"));
             tvFixedResult.setTextColor(Color.parseColor("#FF5252"));
             tvSkinTemp.setTextColor(Color.parseColor("#FF5252"));
-            tvSkinStatus.setText(String.format(Locale.US, "🔥 %s • Лихорадка!", formatTempShort(finalBody)));
+            tvSkinStatus.setText(String.format(Locale.US, "🔥 %s • Лихорадка! (%s)", formatTempShort(finalBody), devStr));
             tvSkinStatus.setTextColor(Color.parseColor("#FF5252"));
         }
 
         if (tvSensorDetail != null) {
-            tvSensorDetail.setText(String.format(Locale.US, "Кожа руки: %s • Среда: %s", 
-                    formatTemp(finalSkin), formatTemp(ambientVal)));
+            String hrStr = lastHeartRateBpm > 0 ? String.format(Locale.US, " • Пульс %d", Math.round(lastHeartRateBpm)) : "";
+            tvSensorDetail.setText(String.format(Locale.US, "Кожа: %s • База суток: %.1f°%s", 
+                    formatTemp(finalSkin), circadianBase, hrStr));
         }
 
         if (mercuryViewWrist != null) {
@@ -1915,6 +1992,14 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         if (type == 34 || name.contains("offbody") || strType.contains("offbody")) {
             isOnWrist = (value > 0.5f);
             recalculateAndDisplay();
+            return;
+        }
+
+        if (type == Sensor.TYPE_HEART_RATE || type == 21 || name.contains("heart_rate")) {
+            if (value >= 35.0f && value <= 220.0f) {
+                lastHeartRateBpm = value;
+                recalculateAndDisplay();
+            }
             return;
         }
 

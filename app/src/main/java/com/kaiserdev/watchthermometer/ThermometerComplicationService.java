@@ -75,6 +75,7 @@ public class ThermometerComplicationService extends Service {
         SharedPreferences sp = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         float skinTemp = sp.getFloat(KEY_SKIN_TEMP, -1.0f);
         float bodyEst = sp.getFloat(KEY_BODY_EST, -1.0f);
+        boolean isFahrenheit = sp.getBoolean("is_fahrenheit", false);
         long lastTime = sp.getLong(KEY_TIMESTAMP, 0);
 
         // If no cache or older than 10 minutes, sample battery hardware gauge on the fly
@@ -104,8 +105,10 @@ public class ThermometerComplicationService extends Service {
             bodyEst = 36.6f;
         }
 
-        String tempStr = String.format(Locale.US, "%.1f°", skinTemp);
-        String bodyStr = String.format(Locale.US, "%.1f°", bodyEst);
+        float dispSkin = isFahrenheit ? (skinTemp * 1.8f + 32f) : skinTemp;
+        float dispBody = isFahrenheit ? (bodyEst * 1.8f + 32f) : bodyEst;
+        String tempStr = String.format(Locale.US, "%.1f°", dispSkin);
+        String bodyStr = String.format(Locale.US, "%.1f°", dispBody);
 
         Intent launchIntent = new Intent(this, MainActivity.class);
         launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);

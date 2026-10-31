@@ -814,7 +814,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
 
         if (tvSensorList != null) {
-            tvSensorList.setText("Xiaomi Watch 5 • Clinical v4.1.0");
+            tvSensorList.setText("Xiaomi Watch 5 • Clinical v4.2.0");
         }
     }
 
@@ -938,6 +938,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     }
 
     private void checkBatteryOverheat(float bTemp) {
+        if (layoutOverheat == null || tvOverheatMsg == null) return;
         if (bTemp >= 42.0f) {
             layoutOverheat.setVisibility(View.VISIBLE);
             tvOverheatMsg.setText(String.format(Locale.US, "⚠️ Батарея %s! Снимите с зарядки", formatTemp(bTemp)));
@@ -984,8 +985,9 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     }
 
     private void recalculateAndDisplay() {
-        float ambientVal = (lastAmbientTemp > -40.0f && lastAmbientTemp < 70.0f) ? lastAmbientTemp : 23.5f;
-        tvAmbientTemp.setText(formatTemp(ambientVal));
+        boolean hasValidAmbient = (lastAmbientTemp > 0.0f && lastAmbientTemp < 60.0f);
+        float ambientVal = hasValidAmbient ? lastAmbientTemp : 23.5f;
+        tvAmbientTemp.setText(hasValidAmbient ? formatTemp(ambientVal) : ("--.- " + (isFahrenheit ? "°F" : "°C")));
 
         float contactTemp = getCompensatedContactTemp();
 
@@ -1075,9 +1077,12 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         now = System.currentTimeMillis();
         float circadianBase = CircadianModel.getBaseline(now);
 
-        // Smooth bounded non-linear environmental compensation (tanh saturation, max ±0.45°C)
-        float rawAmbDelta = (float) (Math.tanh((23.5f - ambientVal) / 10.0f) * 0.45f);
-        float ambientDelta = Math.max(-0.5f, Math.min(0.5f, rawAmbDelta));
+        // Smooth bounded non-linear environmental compensation (only when valid ambient sensor exists)
+        float ambientDelta = 0.0f;
+        if (hasValidAmbient) {
+            float rawAmbDelta = (float) (Math.tanh((23.5f - ambientVal) / 10.0f) * 0.45f);
+            ambientDelta = Math.max(-0.5f, Math.min(0.5f, rawAmbDelta));
+        }
 
         float skinDelta = filteredSkin - 33.0f;
         // Compensate for nighttime peripheral vasodilation during sleep phase
@@ -1344,9 +1349,13 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
         long now = System.currentTimeMillis();
         float circadianBase = CircadianModel.getBaseline(now);
-        float ambientVal = (lastAmbientTemp > -40.0f && lastAmbientTemp < 70.0f) ? lastAmbientTemp : 23.5f;
-        float rawAmbDelta = (float) (Math.tanh((23.5f - ambientVal) / 10.0f) * 0.45f);
-        float ambientDelta = Math.max(-0.5f, Math.min(0.5f, rawAmbDelta));
+        boolean hasValidAmbientMeasure = (lastAmbientTemp > 0.0f && lastAmbientTemp < 60.0f);
+        float ambientVal = hasValidAmbientMeasure ? lastAmbientTemp : 23.5f;
+        float ambientDelta = 0.0f;
+        if (hasValidAmbientMeasure) {
+            float rawAmbDelta = (float) (Math.tanh((23.5f - ambientVal) / 10.0f) * 0.45f);
+            ambientDelta = Math.max(-0.5f, Math.min(0.5f, rawAmbDelta));
+        }
         float skinDelta = finalSkin - 33.0f;
         if (CircadianModel.isNightSleepPhase(now) && skinDelta > 0) {
             skinDelta *= 0.35f;
@@ -1701,7 +1710,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             if (e.deltaPrev > 0.05f) {
                 deltaStr = String.format(Locale.US, " (+%.1f°↑)", dVal);
             } else if (e.deltaPrev < -0.05f) {
-                deltaStr = String.format(Locale.US, " (%.1f°↓)", dVal);
+                deltaStr = String.format(Locale.US, " (-%.1f°↓)", Math.abs(dVal));
             } else {
                 deltaStr = " (=)";
             }

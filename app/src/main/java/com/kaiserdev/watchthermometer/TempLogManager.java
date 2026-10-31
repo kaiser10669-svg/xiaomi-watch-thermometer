@@ -153,7 +153,7 @@ public class TempLogManager {
         }
 
         if (bodyHistory.isEmpty()) {
-            report.statusSummary = "Только замеры среды/воды";
+            report.statusSummary = "Только замеры воздуха";
             report.trendStr = "—";
             report.formattedReport = "В журнале пока нет замеров температуры тела.";
             return report;

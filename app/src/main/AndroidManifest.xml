@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.kaiserdev.watchthermometer"
-    android:versionCode="20"
-    android:versionName="4.4.0">
+    android:versionCode="21"
+    android:versionName="4.5.0">
 
     <uses-feature android:name="android.hardware.type.watch" />
 
@@ -13,6 +13,7 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="com.xiaomi.miwear.permission.CUSTOM_SENSORS" />
@@ -48,7 +49,13 @@
         <!-- Background Medication Reminder BroadcastReceiver -->
         <receiver
             android:name=".MedicationAlarmReceiver"
-            android:exported="false" />
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.kaiserdev.watchthermometer.ACTION_MED_ALARM" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Wear OS Complication Provider Service for Watch Faces -->
         <service

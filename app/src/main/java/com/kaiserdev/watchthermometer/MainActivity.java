@@ -847,7 +847,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
 
         if (tvSensorList != null) {
-            tvSensorList.setText("Xiaomi Watch 5 • Clinical v4.4.0");
+            tvSensorList.setText("Xiaomi Watch 5 • Clinical v4.5.0");
         }
     }
 
@@ -944,8 +944,10 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
 
         // PPG Heart Rate Vasodilation Compensation:
-        // When skin is warm (> 33.5°C) and heart rate is elevated (> 85 bpm), peripheral capillaries dilate
-        if (isOnWrist && raw > 33.5f && lastHeartRateBpm > 85.0f && lastHeartRateBpm <= 200.0f) {
+        // When skin is warm (> 33.5°C) and fresh heart rate is elevated (> 85 bpm), peripheral capillaries dilate
+        long nowHr = System.currentTimeMillis();
+        boolean hasFreshHr = (lastHeartRateBpm > 0 && (nowHr - lastHeartRateTimestampMs < 15000));
+        if (isOnWrist && raw > 33.5f && hasFreshHr && lastHeartRateBpm > 85.0f && lastHeartRateBpm <= 200.0f) {
             float vasoOffset = Math.min(0.40f, (lastHeartRateBpm - 85.0f) * 0.005f);
             raw -= vasoOffset;
         }
@@ -1175,7 +1177,9 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
 
         if (tvSensorDetail != null) {
-            String hrStr = lastHeartRateBpm > 0 ? String.format(Locale.US, " • Пульс %d", Math.round(lastHeartRateBpm)) : "";
+            long nowPulse = System.currentTimeMillis();
+            boolean hasPulse = (lastHeartRateBpm > 0 && (nowPulse - lastHeartRateTimestampMs < 15000));
+            String hrStr = hasPulse ? String.format(Locale.US, " • Пульс %d", Math.round(lastHeartRateBpm)) : "";
             tvSensorDetail.setText(String.format(Locale.US, "Кожа: %s • База суток: %.1f°%s", 
                     formatTemp(filteredSkin), circadianBase, hrStr));
         }
@@ -1470,7 +1474,9 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
 
         if (tvSensorDetail != null) {
-            String hrStr = lastHeartRateBpm > 0 ? String.format(Locale.US, " • Пульс %d", Math.round(lastHeartRateBpm)) : "";
+            long nowPulse = System.currentTimeMillis();
+            boolean hasPulse = (lastHeartRateBpm > 0 && (nowPulse - lastHeartRateTimestampMs < 15000));
+            String hrStr = hasPulse ? String.format(Locale.US, " • Пульс %d", Math.round(lastHeartRateBpm)) : "";
             tvSensorDetail.setText(String.format(Locale.US, "Кожа: %s • База суток: %.1f°%s", 
                     formatTemp(finalSkin), circadianBase, hrStr));
         }
@@ -1798,7 +1804,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             TextView tvRight = new TextView(this);
             String deltaStr = "";
             float dVal = isFahrenheit ? (e.deltaPrev * 1.8f) : e.deltaPrev;
-            if (i == entries.size() - 1 && Math.abs(e.deltaPrev) < 0.05f) {
+            if (Math.abs(e.deltaPrev - TempLogManager.NO_DELTA) < 1.0f || (i == entries.size() - 1 && Math.abs(e.deltaPrev) < 0.05f)) {
                 deltaStr = " (база)";
             } else if (e.deltaPrev > 0.05f) {
                 deltaStr = String.format(Locale.US, " (+%.1f°↑)", dVal);
@@ -1918,6 +1924,9 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             }
         }
 
+        if (mainScrollView != null) {
+            mainScrollView.requestFocus();
+        }
         uiHandler.removeCallbacks(this);
         uiHandler.post(this);
     }
@@ -2013,6 +2022,9 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
 
         if (type == Sensor.TYPE_HEART_RATE || type == 21 || name.contains("heart_rate")) {
+            if (event.accuracy < 0) { // SENSOR_STATUS_NO_CONTACT (-1)
+                return;
+            }
             if (value >= 35.0f && value <= 220.0f) {
                 lastHeartRateBpm = value;
                 lastHeartRateTimestampMs = System.currentTimeMillis();

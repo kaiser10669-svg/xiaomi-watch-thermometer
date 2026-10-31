@@ -1,5 +1,6 @@
 package com.kaiserdev.watchthermometer;
 
+import android.app.AlarmManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -7,6 +8,7 @@ import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.PowerManager;
@@ -23,6 +25,56 @@ public class MedicationAlarmReceiver extends BroadcastReceiver {
     public void onReceive(Context context, Intent intent) {
         if (context == null) return;
 
+        if (intent != null) {
+            String action = intent.getAction();
+            if (Intent.ACTION_BOOT_COMPLETED.equals(action) || Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {
+                restorePendingAlarm(context);
+                return;
+            }
+        }
+
+        triggerAlarmNotification(context);
+    }
+
+    private void restorePendingAlarm(Context context) {
+        try {
+            SharedPreferences sp = context.getSharedPreferences(ThermometerComplicationService.PREFS_NAME, Context.MODE_PRIVATE);
+            long target = sp.getLong("med_timer_target", 0);
+            if (target <= 0) return;
+
+            long diff = target - System.currentTimeMillis();
+            if (diff > 0) {
+                AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+                if (am != null) {
+                    Intent alarmIntent = new Intent(context, MedicationAlarmReceiver.class);
+                    alarmIntent.setAction(ACTION_MED_ALARM);
+                    int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+                    if (Build.VERSION.SDK_INT >= 31) {
+                        flags |= PendingIntent.FLAG_IMMUTABLE;
+                    }
+                    PendingIntent pi = PendingIntent.getBroadcast(context, 1001, alarmIntent, flags);
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        if (am.canScheduleExactAlarms()) {
+                            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, target, pi);
+                        } else {
+                            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, target, pi);
+                        }
+                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, target, pi);
+                    } else {
+                        am.setExact(AlarmManager.RTC_WAKEUP, target, pi);
+                    }
+                }
+            } else if (diff > -7200000L) {
+                // Expired during reboot window, fire notification immediately
+                triggerAlarmNotification(context);
+            } else {
+                sp.edit().remove("med_timer_target").apply();
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    private void triggerAlarmNotification(Context context) {
         // Acquire a temporary 3.5s WakeLock to guarantee vibration pattern completes during Doze/deep sleep
         PowerManager.WakeLock wakeLock = null;
         try {

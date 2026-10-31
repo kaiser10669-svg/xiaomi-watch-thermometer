@@ -72,17 +72,38 @@ public class ThermometerComplicationService extends Service {
         return mBinder;
     }
 
+    private static int sCachedSkinZone = -1;
+
     private static float readDirectSysfsSkinTemp() {
         try {
-            File f = new File("/sys/class/thermal/thermal_zone4/temp");
-            if (f.exists() && f.canRead()) {
-                BufferedReader br = new BufferedReader(new FileReader(f));
-                String line = br.readLine();
-                br.close();
-                if (line != null) {
-                    float raw = Float.parseFloat(line.trim());
-                    if (raw > 0) {
-                        return raw > 1000 ? raw / 1000.0f : (raw > 100 ? raw / 10.0f : raw);
+            if (sCachedSkinZone < 0) {
+                for (int i = 0; i <= 24; i++) {
+                    File typeFile = new File("/sys/class/thermal/thermal_zone" + i + "/type");
+                    if (typeFile.exists() && typeFile.canRead()) {
+                        BufferedReader br = new BufferedReader(new FileReader(typeFile));
+                        String line = br.readLine();
+                        br.close();
+                        if (line != null) {
+                            String type = line.trim().toLowerCase(Locale.US);
+                            if (type.contains("sdm-skin-therm") || type.contains("skin")) {
+                                sCachedSkinZone = i;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            if (sCachedSkinZone >= 0) {
+                File f = new File("/sys/class/thermal/thermal_zone" + sCachedSkinZone + "/temp");
+                if (f.exists() && f.canRead()) {
+                    BufferedReader br = new BufferedReader(new FileReader(f));
+                    String line = br.readLine();
+                    br.close();
+                    if (line != null) {
+                        float raw = Float.parseFloat(line.trim());
+                        if (raw > 0) {
+                            return raw > 1000 ? raw / 1000.0f : (raw > 100 ? raw / 10.0f : raw);
+                        }
                     }
                 }
             }

@@ -16,7 +16,8 @@ public class TempLogManager {
 
     private static final String PREFS_NAME = "watch_thermometer_prefs";
     private static final String PREF_HISTORY_KEY = "temp_history_json";
-    private static final int MAX_ENTRIES = 16;
+    public static final int MAX_ENTRIES = 32;
+    public static final float NO_DELTA = 999.0f;
 
     public static class Entry {
         public long timestamp;
@@ -59,7 +60,7 @@ public class TempLogManager {
         SharedPreferences sp = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         List<Entry> history = getHistory(context);
 
-        float delta = 0f;
+        float delta = NO_DELTA;
         boolean isCurrentBody = (mode == 0 || mode == 1);
         for (Entry e : history) {
             boolean isHistoryBody = (e.mode == 0 || e.mode == 1);
@@ -113,7 +114,7 @@ public class TempLogManager {
                 e.tempBody = (float) obj.optDouble("b");
                 e.tempSkin = (float) obj.optDouble("s");
                 e.mode = obj.optInt("m");
-                e.deltaPrev = (float) obj.optDouble("d");
+                e.deltaPrev = (float) obj.optDouble("d", NO_DELTA);
                 list.add(e);
             }
         } catch (Exception ignored) {}

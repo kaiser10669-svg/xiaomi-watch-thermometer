@@ -1277,7 +1277,7 @@
             android:id="@+id/tvSensorList"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Xiaomi Watch 5 • Clinical v3.7.0"
+            android:text="Xiaomi Watch 5 • Clinical v3.8.0"
             android:textColor="@color/text_title"
             android:textSize="9sp"
             android:gravity="center" />

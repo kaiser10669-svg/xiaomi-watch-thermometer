@@ -1,14 +1,21 @@
 package com.kaiserdev.watchthermometer;
 
-import java.util.Calendar;
 import java.util.Locale;
+import java.util.TimeZone;
 
 /**
  * Human Hypothalamic Circadian Core Temperature Model.
  * Based on Mackowiak / Wunderlich chronobiological studies.
  * Accurately aligns circadian Zenith (~17:30, 37.05°C) and Nadir (~05:30, 36.25°C).
+ * Ultra-performance: Zero heap allocations, pure integer/float arithmetic.
  */
 public class CircadianModel {
+
+    private static float getLocalHourOfDay(long timestampMs) {
+        long localMs = timestampMs + TimeZone.getDefault().getOffset(timestampMs);
+        long msInDay = (localMs % 86400000L + 86400000L) % 86400000L;
+        return msInDay / 3600000.0f;
+    }
 
     /**
      * Returns expected healthy human baseline body temperature for the given time of day.
@@ -16,9 +23,7 @@ public class CircadianModel {
      * Zenith ~17:30 PM (37.05°C)
      */
     public static float getBaseline(long timestampMs) {
-        Calendar cal = Calendar.getInstance();
-        cal.setTimeInMillis(timestampMs);
-        float hour = cal.get(Calendar.HOUR_OF_DAY) + cal.get(Calendar.MINUTE) / 60.0f;
+        float hour = getLocalHourOfDay(timestampMs);
 
         // Peak at 17:30 (17.5h): (17.5 - 11.5) = 6.0 => phase = pi/2, sin = +1.0
         // Nadir at 05:30 (5.5h): (5.5 - 11.5) = -6.0 => phase = -pi/2, sin = -1.0
@@ -32,10 +37,8 @@ public class CircadianModel {
      * where distal vasodilation naturally increases peripheral wrist temperature.
      */
     public static boolean isNightSleepPhase(long timestampMs) {
-        Calendar cal = Calendar.getInstance();
-        cal.setTimeInMillis(timestampMs);
-        int hour = cal.get(Calendar.HOUR_OF_DAY);
-        return hour >= 23 || hour < 6;
+        float hour = getLocalHourOfDay(timestampMs);
+        return hour >= 23.0f || hour < 6.0f;
     }
 
     /**

@@ -220,6 +220,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     private volatile float lastHeartRateBpm = -1.0f;
     private float displayedBodyTemp = -1.0f;
     private ValueAnimator tempAnimator;
+    private AlertDialog clinicalDialog;
 
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
 
@@ -581,6 +582,9 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             @Override
             public void onClick(View v) {
                 TempLogManager.clearHistory(MainActivity.this);
+                if (sparklineView != null) {
+                    sparklineView.clear();
+                }
                 updateHistoryView();
                 vibrateTick();
             }
@@ -630,7 +634,13 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
                     flags |= PendingIntent.FLAG_IMMUTABLE;
                 }
                 PendingIntent pi = PendingIntent.getBroadcast(this, 1001, intent, flags);
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    if (am.canScheduleExactAlarms()) {
+                        am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, target, pi);
+                    } else {
+                        am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, target, pi);
+                    }
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, target, pi);
                 } else {
                     am.setExact(AlarmManager.RTC_WAKEUP, target, pi);
@@ -723,6 +733,11 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     }
 
     private void switchMode(int mode) {
+        if (isMeasuring) cancelMeasurement();
+        if (isTempleMeasuring) cancelTempleMeasurement();
+        if (isWaterMeasuring) cancelWaterMeasurement();
+        if (isRoomMeasuring) cancelRoomMeasurement();
+
         currentMode = mode;
         vibrateTick();
 
@@ -765,13 +780,17 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     public boolean onGenericMotionEvent(MotionEvent event) {
         if (event.getAction() == MotionEvent.ACTION_SCROLL && event.isFromSource(InputDevice.SOURCE_ROTARY_ENCODER)) {
             float delta = -event.getAxisValue(MotionEvent.AXIS_SCROLL);
-            int scrollY = Math.round(delta * 48);
+            float density = getResources().getDisplayMetrics().density;
+            int scrollPixels = Math.round(delta * density * 32);
             if (mainScrollView != null) {
-                mainScrollView.smoothScrollBy(0, scrollY);
-                long now = System.currentTimeMillis();
-                if (now - lastCrownVibeMs > 60) {
-                    lastCrownVibeMs = now;
-                    vibrateTick();
+                int direction = delta > 0 ? 1 : -1;
+                if (mainScrollView.canScrollVertically(direction)) {
+                    mainScrollView.scrollBy(0, scrollPixels);
+                    long now = System.currentTimeMillis();
+                    if (now - lastCrownVibeMs > 50) {
+                        lastCrownVibeMs = now;
+                        vibrateTick();
+                    }
                 }
             }
             return true;
@@ -802,7 +821,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     private void discoverSensors() {
         registeredSensors.clear();
         if (sensorManager == null) {
-            tvSensorList.setText("SensorManager недоступен");
+            if (tvSensorList != null) tvSensorList.setText("SensorManager недоступен");
             return;
         }
 
@@ -813,39 +832,26 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             String strType = s.getStringType() != null ? s.getStringType().toLowerCase(Locale.US) : "";
 
             if (type == Sensor.TYPE_LIGHT) continue;
-            if (type == 65590 || name.contains("skin temperature")) continue; // Handled directly via kernel sysfs sdm-skin-therm
 
             boolean isOffbody = type == 34 || name.contains("offbody") || strType.contains("offbody");
-            boolean isSkin = name.contains("skin") || strType.contains("skin_temperature") || name.contains("body_temp");
-            boolean isAmbient = type == Sensor.TYPE_AMBIENT_TEMPERATURE || type == 7 || (name.contains("ambient") && name.contains("temp")) || (name.contains("temp") && !name.contains("battery"));
-            boolean isBaro = type == Sensor.TYPE_PRESSURE || name.contains("pressure") || name.contains("barometer");
+            boolean isSkin = type == 65590 || name.contains("skin") || strType.contains("skin_temperature") || name.contains("body_temp");
+            boolean isAmbient = type == Sensor.TYPE_AMBIENT_TEMPERATURE || type == 7 || name.contains("ambient_temp");
             boolean isHeartRate = type == Sensor.TYPE_HEART_RATE || type == 21 || name.contains("heart_rate");
 
-            if (isOffbody || isSkin || isAmbient || isBaro || isHeartRate) {
+            if (isOffbody || isSkin || isAmbient || isHeartRate) {
                 registeredSensors.add(s);
             }
         }
 
-        tvSensorList.setText("Аппаратный датчик: sdm-skin-therm • v3.7.0");
+        if (tvSensorList != null) {
+            tvSensorList.setText("Xiaomi Watch 5 • Clinical v3.8.0");
+        }
     }
 
     private void pollThermalSources() {
         ioExecutor.execute(new Runnable() {
             @Override
             public void run() {
-                File bridgeFile = new File("/sdcard/Download/skin_temp.txt");
-                if (bridgeFile.exists() && bridgeFile.canRead()) {
-                    try (BufferedReader br = new BufferedReader(new FileReader(bridgeFile))) {
-                        String line = br.readLine();
-                        if (line != null) {
-                            float val = Float.parseFloat(line.trim());
-                            if (val > 10.0f && val < 50.0f) {
-                                directSkinTemp = val;
-                            }
-                        }
-                    } catch (Exception ignored) {}
-                }
-
                 if (!thermalZonesDiscovered) {
                     for (int i = 0; i <= 24; i++) {
                         File typeFile = new File("/sys/class/thermal/thermal_zone" + i + "/type");
@@ -936,16 +942,10 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             raw -= cpuExcess * 0.08f;
         }
 
-        // Internal hardware self-heating attenuation:
-        // If battery or motherboard is warm (> 36.0°C), excess heat is internal device dissipation
-        if (directSkinTemp <= 0 && raw > 36.0f) {
-            raw = 36.0f + (raw - 36.0f) * 0.20f;
-        }
-
         // PPG Heart Rate Vasodilation Compensation:
-        // Elevated heart rate (> 75 bpm) dilates peripheral capillaries, warming wrist skin
-        if (isOnWrist && lastHeartRateBpm > 75.0f && lastHeartRateBpm <= 200.0f) {
-            float vasoOffset = Math.min(0.50f, (lastHeartRateBpm - 75.0f) * 0.007f);
+        // When skin is warm (> 33.5°C) and heart rate is elevated (> 85 bpm), peripheral capillaries dilate
+        if (isOnWrist && raw > 33.5f && lastHeartRateBpm > 85.0f && lastHeartRateBpm <= 200.0f) {
+            float vasoOffset = Math.min(0.40f, (lastHeartRateBpm - 85.0f) * 0.005f);
             raw -= vasoOffset;
         }
 
@@ -1014,7 +1014,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     }
 
     private void recalculateAndDisplay() {
-        float ambientVal = lastAmbientTemp > 0 ? lastAmbientTemp : 23.5f;
+        float ambientVal = (lastAmbientTemp > -40.0f && lastAmbientTemp < 70.0f) ? lastAmbientTemp : 23.5f;
         tvAmbientTemp.setText(formatTemp(ambientVal));
 
         float contactTemp = getCompensatedContactTemp();
@@ -1058,7 +1058,10 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         // --- Temple Mode Display ---
         if (isTempleMeasuring) {
             float liveTempleSkin = contactTemp;
-            float liveTempleBody = liveTempleSkin + 1.25f + tempOffset;
+            long nowT = System.currentTimeMillis();
+            float circBase = CircadianModel.getBaseline(nowT);
+            float templeDelta = liveTempleSkin - 34.5f;
+            float liveTempleBody = circBase + (templeDelta * 0.70f) + tempOffset;
             if (liveTempleBody < 34.0f) liveTempleBody = 34.0f;
             if (liveTempleBody > 42.0f) liveTempleBody = 42.0f;
             liveTempleBody = Math.round(liveTempleBody * 10f) / 10f;
@@ -1081,7 +1084,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         // --- Wrist Mode Processing ---
         long now = System.currentTimeMillis();
         boolean hasHeartRatePulse = (lastHeartRateBpm >= 40.0f && (now - lastHeartRateTimestampMs < 8000));
-        boolean reallyOnWrist = !isPlugged && !isCharging && (isOnWrist || hasHeartRatePulse) && (contactTemp >= 22.0f);
+        boolean reallyOnWrist = !isPlugged && !isCharging && (isOnWrist || hasHeartRatePulse) && (contactTemp >= 16.0f);
         if (!reallyOnWrist) {
             kalmanSkin.reset(-100.0f);
             kalmanBody.reset(-100.0f);
@@ -1387,7 +1390,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
         long now = System.currentTimeMillis();
         float circadianBase = CircadianModel.getBaseline(now);
-        float ambientVal = lastAmbientTemp > 0 ? lastAmbientTemp : 23.5f;
+        float ambientVal = (lastAmbientTemp > -40.0f && lastAmbientTemp < 70.0f) ? lastAmbientTemp : 23.5f;
         float rawAmbDelta = (float) (Math.tanh((23.5f - ambientVal) / 10.0f) * 0.45f);
         float ambientDelta = Math.max(-0.5f, Math.min(0.5f, rawAmbDelta));
         float skinDelta = finalSkin - 33.0f;
@@ -1464,6 +1467,30 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         uiHandler.removeCallbacks(measureCountdownRunnable);
         layoutMeasuring.setVisibility(View.GONE);
         btnStartMeasure.setVisibility(View.VISIBLE);
+    }
+
+    private void cancelTempleMeasurement() {
+        setWakeLockActive(false);
+        isTempleMeasuring = false;
+        uiHandler.removeCallbacks(templeCountdownRunnable);
+        if (tvTempleCountdown != null) tvTempleCountdown.setVisibility(View.GONE);
+        if (btnStartTempleMeasure != null) btnStartTempleMeasure.setVisibility(View.VISIBLE);
+    }
+
+    private void cancelWaterMeasurement() {
+        setWakeLockActive(false);
+        isWaterMeasuring = false;
+        uiHandler.removeCallbacks(waterCountdownRunnable);
+        if (tvWaterCountdown != null) tvWaterCountdown.setVisibility(View.GONE);
+        if (btnStartWaterMeasure != null) btnStartWaterMeasure.setVisibility(View.VISIBLE);
+    }
+
+    private void cancelRoomMeasurement() {
+        setWakeLockActive(false);
+        isRoomMeasuring = false;
+        uiHandler.removeCallbacks(roomCountdownRunnable);
+        if (tvRoomCountdown != null) tvRoomCountdown.setVisibility(View.GONE);
+        if (btnStartRoomMeasure != null) btnStartRoomMeasure.setVisibility(View.VISIBLE);
     }
 
     // --- Temple / Forehead Measurement (15 seconds) ---
@@ -1709,21 +1736,17 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
     // --- History View Rendering ---
     private void showClinicalReportDialog() {
-        ioExecutor.execute(new Runnable() {
-            @Override
-            public void run() {
-                TempLogManager.exportDoctorReport(MainActivity.this);
-            }
-        });
-
+        if (clinicalDialog != null && clinicalDialog.isShowing()) {
+            clinicalDialog.dismiss();
+        }
         TempLogManager.ClinicalReport report = TempLogManager.buildClinicalReport(this, isFahrenheit);
 
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("📊 Сводка за 24 часа");
         builder.setMessage(report.formattedReport);
         builder.setPositiveButton("Понятно", null);
-        AlertDialog dialog = builder.create();
-        dialog.show();
+        clinicalDialog = builder.create();
+        clinicalDialog.show();
     }
 
     private void updateHistoryView() {
@@ -1790,19 +1813,19 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
     private void savePrefsAndUpdateComplication(float skinTemp, float bodyEst, float ambientTemp) {
         try {
-            getSharedPreferences(ThermometerComplicationService.PREFS_NAME, Context.MODE_PRIVATE)
-                    .edit()
-                    .putFloat(ThermometerComplicationService.KEY_SKIN_TEMP, skinTemp)
-                    .putFloat(ThermometerComplicationService.KEY_BODY_EST, bodyEst)
-                    .putFloat(ThermometerComplicationService.KEY_AMBIENT_TEMP, ambientTemp)
-                    .putLong(ThermometerComplicationService.KEY_TIMESTAMP, System.currentTimeMillis())
-                    .apply();
-
             long now = System.currentTimeMillis();
-            // Throttle IPC broadcast: max once per 60 seconds or on >= 0.3°C shift
-            if (now - lastComplicationBroadcastMs > 60000 || Math.abs(bodyEst - lastBroadcastBody) >= 0.3f) {
+            // Throttle disk writes and IPC broadcast: max once per 60s or on >= 0.2°C shift
+            if (now - lastComplicationBroadcastMs > 60000 || Math.abs(bodyEst - lastBroadcastBody) >= 0.2f) {
                 lastComplicationBroadcastMs = now;
                 lastBroadcastBody = bodyEst;
+                getSharedPreferences(ThermometerComplicationService.PREFS_NAME, Context.MODE_PRIVATE)
+                        .edit()
+                        .putFloat(ThermometerComplicationService.KEY_SKIN_TEMP, skinTemp)
+                        .putFloat(ThermometerComplicationService.KEY_BODY_EST, bodyEst)
+                        .putFloat(ThermometerComplicationService.KEY_AMBIENT_TEMP, ambientTemp)
+                        .putLong(ThermometerComplicationService.KEY_TIMESTAMP, now)
+                        .apply();
+
                 ThermometerComplicationService.requestComplicationUpdate(this);
             }
         } catch (Exception ignored) {}
@@ -1902,13 +1925,23 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             btnStartWaterMeasure.setVisibility(View.VISIBLE);
         }
         if (isRoomMeasuring) {
-            isRoomMeasuring = false;
-            uiHandler.removeCallbacks(roomCountdownRunnable);
-            tvRoomCountdown.setVisibility(View.GONE);
-            btnStartRoomMeasure.setVisibility(View.VISIBLE);
+            cancelRoomMeasurement();
         }
         if (tempAnimator != null && tempAnimator.isRunning()) {
             tempAnimator.cancel();
+        }
+        if (mercuryViewWrist != null) {
+            mercuryViewWrist.cancelAnimation();
+        }
+        if (mercuryViewTemple != null) {
+            mercuryViewTemple.cancelAnimation();
+        }
+        if (voiceAssistant != null) {
+            voiceAssistant.stop();
+        }
+        if (clinicalDialog != null && clinicalDialog.isShowing()) {
+            clinicalDialog.dismiss();
+            clinicalDialog = null;
         }
 
         uiHandler.removeCallbacks(this);
@@ -1925,13 +1958,24 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
     @Override
     protected void onDestroy() {
+        uiHandler.removeCallbacksAndMessages(null);
         super.onDestroy();
         setWakeLockActive(false);
+        if (clinicalDialog != null && clinicalDialog.isShowing()) {
+            clinicalDialog.dismiss();
+            clinicalDialog = null;
+        }
         if (ioExecutor != null && !ioExecutor.isShutdown()) {
-            ioExecutor.shutdown();
+            ioExecutor.shutdownNow();
         }
         if (tempAnimator != null) {
             tempAnimator.cancel();
+        }
+        if (mercuryViewWrist != null) {
+            mercuryViewWrist.cancelAnimation();
+        }
+        if (mercuryViewTemple != null) {
+            mercuryViewTemple.cancelAnimation();
         }
         if (voiceAssistant != null) {
             voiceAssistant.destroy();
@@ -1975,8 +2019,8 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
                 directSkinTemp = value;
                 recalculateAndDisplay();
             }
-        } else if (type == Sensor.TYPE_AMBIENT_TEMPERATURE || type == 7 || (name.contains("ambient") && name.contains("temp")) || (name.contains("temp") && !name.contains("battery"))) {
-            if (value > 5.0f && value < 70.0f) {
+        } else if (type == Sensor.TYPE_AMBIENT_TEMPERATURE || type == 7 || name.contains("ambient_temp")) {
+            if (value >= -30.0f && value <= 70.0f) {
                 lastAmbientTemp = value;
                 recalculateAndDisplay();
             }

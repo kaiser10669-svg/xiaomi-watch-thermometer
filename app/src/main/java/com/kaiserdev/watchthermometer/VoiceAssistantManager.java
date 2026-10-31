@@ -5,7 +5,6 @@ import android.content.SharedPreferences;
 import android.media.AudioAttributes;
 import android.os.Build;
 import android.speech.tts.TextToSpeech;
-import android.widget.Toast;
 
 import java.util.Locale;
 
@@ -16,6 +15,7 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
     private TextToSpeech tts;
     private boolean isReady = false;
     private boolean isMuted = false;
+    private boolean fallbackAttempted = false;
 
     public VoiceAssistantManager(Context context) {
         this.appContext = context.getApplicationContext();
@@ -27,11 +27,11 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
 
     private void initTtsEngine() {
         try {
-            // Explicitly target Google TTS engine on Wear OS / HyperOS
+            // First attempt: explicitly target Google TTS engine on Wear OS
             tts = new TextToSpeech(appContext, this, "com.google.android.tts");
         } catch (Throwable t) {
             try {
-                // Fallback to default engine if specific engine binding fails
+                fallbackAttempted = true;
                 tts = new TextToSpeech(appContext, this);
             } catch (Throwable ignored) {
                 isReady = false;
@@ -59,6 +59,19 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
             }
             isReady = true;
         } else {
+            if (!fallbackAttempted) {
+                fallbackAttempted = true;
+                try {
+                    if (tts != null) {
+                        tts.shutdown();
+                    }
+                } catch (Throwable ignored) {}
+                try {
+                    // Fallback to system default TTS engine (e.g. Xiaomi Xiao AI on HyperOS)
+                    tts = new TextToSpeech(appContext, this);
+                    return;
+                } catch (Throwable ignored) {}
+            }
             isReady = false;
         }
     }
@@ -66,30 +79,34 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
     public void speakTemperature(float tempC, boolean isFahrenheit) {
         if (!isReady || isMuted || tts == null) return;
 
+        String statusPhrase;
+        if (tempC < 35.5f) {
+            statusPhrase = "Пониженная.";
+        } else if (tempC <= 37.2f) {
+            statusPhrase = "В пределах нормы!";
+        } else if (tempC <= 38.0f) {
+            statusPhrase = "Субфебрильная. Будьте внимательны.";
+        } else if (tempC <= 38.5f) {
+            statusPhrase = "Повышенная! Рекомендуется отдых и обильное питьё.";
+        } else {
+            statusPhrase = "Внимание! Лихорадка! Примите жаропонижающее.";
+        }
+
         String phrase;
         if (isFahrenheit) {
             float f = tempC * 1.8f + 32f;
             int whole = (int) f;
             int decimal = Math.round((f - whole) * 10f);
             if (decimal == 10) { whole++; decimal = 0; }
-            phrase = String.format(Locale.US, "Температура %d и %d градусов Фаренгейта", whole, decimal);
+            if (decimal == 0) {
+                phrase = String.format(Locale.US, "Температура %d градусов Фаренгейта. %s", whole, statusPhrase);
+            } else {
+                phrase = String.format(Locale.US, "Температура %d и %d градусов Фаренгейта. %s", whole, decimal, statusPhrase);
+            }
         } else {
             int whole = (int) tempC;
             int decimal = Math.round((tempC - whole) * 10f);
             if (decimal == 10) { whole++; decimal = 0; }
-
-            String statusPhrase;
-            if (tempC < 35.5f) {
-                statusPhrase = "Пониженная.";
-            } else if (tempC <= 37.2f) {
-                statusPhrase = "В пределах нормы!";
-            } else if (tempC <= 38.0f) {
-                statusPhrase = "Субфебрильная. Будьте внимательны.";
-            } else if (tempC <= 38.5f) {
-                statusPhrase = "Повышенная! Рекомендуется отдых и обильное питьё.";
-            } else {
-                statusPhrase = "Внимание! Лихорадка! Примите жаропонижающее.";
-            }
 
             if (decimal == 0) {
                 phrase = String.format(Locale.US, "Температура %d ровно. %s", whole, statusPhrase);
@@ -104,10 +121,6 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
     public void speakRoom(float tempC, boolean isFahrenheit) {
         if (!isReady || isMuted || tts == null) return;
 
-        int whole = (int) tempC;
-        int decimal = Math.round((tempC - whole) * 10f);
-        if (decimal == 10) { whole++; decimal = 0; }
-
         String advice;
         if (tempC < 18.0f) {
             advice = "Прохладный микроклимат в помещении.";
@@ -118,10 +131,22 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
         }
 
         String phrase;
-        if (decimal == 0) {
-            phrase = String.format(Locale.US, "Температура воздуха %d градусов. %s", whole, advice);
+        if (isFahrenheit) {
+            float f = tempC * 1.8f + 32f;
+            int whole = (int) f;
+            int decimal = Math.round((f - whole) * 10f);
+            if (decimal == 10) { whole++; decimal = 0; }
+            phrase = String.format(Locale.US, "Температура воздуха %d и %d градусов Фаренгейта. %s", whole, decimal, advice);
         } else {
-            phrase = String.format(Locale.US, "Температура воздуха %d и %d. %s", whole, decimal, advice);
+            int whole = (int) tempC;
+            int decimal = Math.round((tempC - whole) * 10f);
+            if (decimal == 10) { whole++; decimal = 0; }
+
+            if (decimal == 0) {
+                phrase = String.format(Locale.US, "Температура воздуха %d градусов. %s", whole, advice);
+            } else {
+                phrase = String.format(Locale.US, "Температура воздуха %d и %d. %s", whole, decimal, advice);
+            }
         }
 
         speak(phrase);
@@ -129,10 +154,6 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
 
     public void speakWater(float tempC, boolean isFahrenheit) {
         if (!isReady || isMuted || tts == null) return;
-
-        int whole = (int) tempC;
-        int decimal = Math.round((tempC - whole) * 10f);
-        if (decimal == 10) { whole++; decimal = 0; }
 
         String advice;
         if (tempC < 15.0f) {
@@ -150,21 +171,43 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
         }
 
         String phrase;
-        if (decimal == 0) {
-            phrase = String.format(Locale.US, "Температура воды %d градусов. %s", whole, advice);
+        if (isFahrenheit) {
+            float f = tempC * 1.8f + 32f;
+            int whole = (int) f;
+            int decimal = Math.round((f - whole) * 10f);
+            if (decimal == 10) { whole++; decimal = 0; }
+            phrase = String.format(Locale.US, "Температура воды %d и %d градусов Фаренгейта. %s", whole, decimal, advice);
         } else {
-            phrase = String.format(Locale.US, "Температура воды %d и %d. %s", whole, decimal, advice);
+            int whole = (int) tempC;
+            int decimal = Math.round((tempC - whole) * 10f);
+            if (decimal == 10) { whole++; decimal = 0; }
+
+            if (decimal == 0) {
+                phrase = String.format(Locale.US, "Температура воды %d градусов. %s", whole, advice);
+            } else {
+                phrase = String.format(Locale.US, "Температура воды %d и %d. %s", whole, decimal, advice);
+            }
         }
 
         speak(phrase);
     }
 
     private void speak(String text) {
-        if (tts == null) return;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "THERMOMETER_ANNOUNCE");
-        } else {
-            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null);
+        if (tts == null || !isReady) return;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "THERMOMETER_ANNOUNCE");
+            } else {
+                tts.speak(text, TextToSpeech.QUEUE_FLUSH, null);
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    public void stop() {
+        if (tts != null && isReady) {
+            try {
+                tts.stop();
+            } catch (Throwable ignored) {}
         }
     }
 

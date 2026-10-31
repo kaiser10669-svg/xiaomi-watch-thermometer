@@ -9,6 +9,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.os.Build;
+import android.os.PowerManager;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 
@@ -21,6 +22,16 @@ public class MedicationAlarmReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
         if (context == null) return;
+
+        // Acquire a temporary 3.5s WakeLock to guarantee vibration pattern completes during Doze/deep sleep
+        PowerManager.WakeLock wakeLock = null;
+        try {
+            PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+            if (pm != null) {
+                wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "watchthermometer:MedAlarmWl");
+                wakeLock.acquire(3500);
+            }
+        } catch (Throwable ignored) {}
 
         // 1. Wear OS Distinct Medical Alert Vibration (double-pulse + accent pulse)
         try {
@@ -75,7 +86,8 @@ public class MedicationAlarmReceiver extends BroadcastReceiver {
                     nb = new Notification.Builder(context);
                 }
 
-                nb.setSmallIcon(R.drawable.ic_launcher)
+                // Use monochrome complication icon for Wear OS notification spec compliance
+                nb.setSmallIcon(R.drawable.ic_complication_temp)
                   .setContentTitle("💊 Пора принять жаропонижающее!")
                   .setContentText("Прошло время интервала. Проверьте температуру тела.")
                   .setContentIntent(contentIntent)

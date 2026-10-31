@@ -34,6 +34,7 @@ public class MercuryThermometerView extends View {
     private final RectF mercuryRect = new RectF();
     private final Path arrowPath = new Path();
 
+    private float density = 1.0f;
     private float bulbCenterX;
     private float bulbCenterY;
     private float bulbRadius;
@@ -65,6 +66,8 @@ public class MercuryThermometerView extends View {
     }
 
     private void init() {
+        density = getResources().getDisplayMetrics().density;
+
         tubeBgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         tubeBgPaint.setColor(Color.parseColor("#151518"));
         tubeBgPaint.setStyle(Paint.Style.FILL);
@@ -72,7 +75,7 @@ public class MercuryThermometerView extends View {
         tubeBorderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         tubeBorderPaint.setColor(Color.parseColor("#33FFFFFF"));
         tubeBorderPaint.setStyle(Paint.Style.STROKE);
-        tubeBorderPaint.setStrokeWidth(dpToPx(1.2f));
+        tubeBorderPaint.setStrokeWidth(dp(1.2f));
 
         mercuryPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         mercuryPaint.setStyle(Paint.Style.FILL);
@@ -83,26 +86,30 @@ public class MercuryThermometerView extends View {
         tickMajorPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         tickMajorPaint.setColor(Color.parseColor("#88FFFFFF"));
         tickMajorPaint.setStyle(Paint.Style.STROKE);
-        tickMajorPaint.setStrokeWidth(dpToPx(1.0f));
+        tickMajorPaint.setStrokeWidth(dp(1.0f));
 
         tickMinorPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         tickMinorPaint.setColor(Color.parseColor("#44FFFFFF"));
         tickMinorPaint.setStyle(Paint.Style.STROKE);
-        tickMinorPaint.setStrokeWidth(dpToPx(0.8f));
+        tickMinorPaint.setStrokeWidth(dp(0.8f));
 
         textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         textPaint.setColor(Color.parseColor("#99FFFFFF"));
-        textPaint.setTextSize(dpToPx(8.5f));
+        textPaint.setTextSize(dp(8.5f));
         textPaint.setTextAlign(Paint.Align.CENTER);
 
         goldMarkPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         goldMarkPaint.setColor(Color.parseColor("#FFD700")); // Classic Golden 36.6 mark
         goldMarkPaint.setStyle(Paint.Style.STROKE);
-        goldMarkPaint.setStrokeWidth(dpToPx(1.8f));
+        goldMarkPaint.setStrokeWidth(dp(1.8f));
 
         glassReflectionPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         glassReflectionPaint.setColor(Color.parseColor("#22FFFFFF"));
         glassReflectionPaint.setStyle(Paint.Style.FILL);
+    }
+
+    private float dp(float val) {
+        return val * density;
     }
 
     @Override
@@ -110,10 +117,10 @@ public class MercuryThermometerView extends View {
         super.onSizeChanged(w, h, oldw, oldh);
         if (w <= 0 || h <= 0) return;
 
-        float padLeft = dpToPx(16f);
-        float padRight = dpToPx(16f);
-        bulbRadius = dpToPx(9.5f);
-        tubeHeight = dpToPx(8f);
+        float padLeft = dp(16f);
+        float padRight = dp(16f);
+        bulbRadius = dp(9.5f);
+        tubeHeight = dp(8f);
 
         bulbCenterX = padLeft + bulbRadius;
         bulbCenterY = h * 0.38f;
@@ -149,14 +156,13 @@ public class MercuryThermometerView extends View {
         this.currentTemp = clamped;
 
         if (!animate) {
+            cancelAnimation();
             this.animatedTemp = clamped;
             invalidate();
             return;
         }
 
-        if (animator != null && animator.isRunning()) {
-            animator.cancel();
-        }
+        cancelAnimation();
 
         animator = ValueAnimator.ofFloat(animatedTemp, clamped);
         animator.setDuration(700);
@@ -172,6 +178,13 @@ public class MercuryThermometerView extends View {
             }
         });
         animator.start();
+    }
+
+    public void cancelAnimation() {
+        if (animator != null && animator.isRunning()) {
+            animator.cancel();
+            animator = null;
+        }
     }
 
     @Override
@@ -193,8 +206,10 @@ public class MercuryThermometerView extends View {
         float mercuryWidth = (tubeEndX - tubeStartX) * frac;
 
         if (mercuryWidth > 0) {
-            mercuryRect.set(tubeStartX, tubeTop + dpToPx(1f), tubeStartX + mercuryWidth, tubeBottom - dpToPx(1f));
-            canvas.drawRoundRect(mercuryRect, tubeHeight / 2f, tubeHeight / 2f, mercuryPaint);
+            float innerMargin = dp(1f);
+            mercuryRect.set(tubeStartX, tubeTop + innerMargin, tubeStartX + mercuryWidth, tubeBottom - innerMargin);
+            float cornerR = Math.min(tubeHeight / 2f, mercuryWidth / 2f);
+            canvas.drawRoundRect(mercuryRect, cornerR, cornerR, mercuryPaint);
         }
 
         // Draw Bulb (Mercury Reservoir on the left)
@@ -205,38 +220,40 @@ public class MercuryThermometerView extends View {
 
         // Draw Scale Ticks and Labels below tube
         float scaleLength = tubeEndX - tubeStartX;
+        float majorTickY1 = tubeBottom + dp(2f);
+        float majorTickY2 = majorTickY1 + dp(4f);
+        float textY = majorTickY2 + dp(9f);
+
         for (int t = 34; t <= 42; t++) {
             float tickFrac = (t - MIN_SCALE_TEMP) / (MAX_SCALE_TEMP - MIN_SCALE_TEMP);
             float tx = tubeStartX + scaleLength * tickFrac;
-            float ty1 = tubeBottom + dpToPx(2f);
-            float ty2 = ty1 + dpToPx(4f);
-
-            canvas.drawLine(tx, ty1, tx, ty2, tickMajorPaint);
+            canvas.drawLine(tx, majorTickY1, tx, majorTickY2, tickMajorPaint);
             if (t % 2 == 0) {
-                canvas.drawText(String.valueOf(t), tx, ty2 + dpToPx(9f), textPaint);
+                canvas.drawText(String.valueOf(t), tx, textY, textPaint);
             }
         }
 
-        // Minor ticks (every 0.2°C)
-        for (float t = 34.2f; t < 42.0f; t += 0.2f) {
-            if (Math.abs(t - Math.round(t)) < 0.05f) continue;
+        // Minor ticks (every 0.2°C, avoiding whole degrees)
+        float minorTickY1 = tubeBottom + dp(2f);
+        float minorTickY2 = minorTickY1 + dp(2.2f);
+        for (int step = 1; step < 40; step++) {
+            if (step % 5 == 0) continue; // Whole degree already drawn
+            float t = MIN_SCALE_TEMP + step * 0.2f;
             float tickFrac = (t - MIN_SCALE_TEMP) / (MAX_SCALE_TEMP - MIN_SCALE_TEMP);
             float tx = tubeStartX + scaleLength * tickFrac;
-            float ty1 = tubeBottom + dpToPx(2f);
-            float ty2 = ty1 + dpToPx(2f);
-            canvas.drawLine(tx, ty1, tx, ty2, tickMinorPaint);
+            canvas.drawLine(tx, minorTickY1, tx, minorTickY2, tickMinorPaint);
         }
 
         // Classic Golden 36.6°C Arrow and Line
         float goldFrac = (36.6f - MIN_SCALE_TEMP) / (MAX_SCALE_TEMP - MIN_SCALE_TEMP);
         float gx = tubeStartX + scaleLength * goldFrac;
-        canvas.drawLine(gx, tubeTop - dpToPx(4f), gx, tubeBottom + dpToPx(3f), goldMarkPaint);
+        canvas.drawLine(gx, tubeTop - dp(4f), gx, tubeBottom + dp(3f), goldMarkPaint);
 
         goldMarkPaint.setStyle(Paint.Style.FILL);
         arrowPath.reset();
-        arrowPath.moveTo(gx, tubeTop - dpToPx(1f));
-        arrowPath.lineTo(gx - dpToPx(3f), tubeTop - dpToPx(6f));
-        arrowPath.lineTo(gx + dpToPx(3f), tubeTop - dpToPx(6f));
+        arrowPath.moveTo(gx, tubeTop - dp(1f));
+        arrowPath.lineTo(gx - dp(3f), tubeTop - dp(6f));
+        arrowPath.lineTo(gx + dp(3f), tubeTop - dp(6f));
         arrowPath.close();
         canvas.drawPath(arrowPath, goldMarkPaint);
         goldMarkPaint.setStyle(Paint.Style.STROKE);
@@ -245,12 +262,6 @@ public class MercuryThermometerView extends View {
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
-        if (animator != null && animator.isRunning()) {
-            animator.cancel();
-        }
-    }
-
-    private float dpToPx(float dp) {
-        return dp * getResources().getDisplayMetrics().density;
+        cancelAnimation();
     }
 }

@@ -5,6 +5,7 @@ package com.kaiserdev.watchthermometer;
  * Features:
  * - Robust IEEE 754 NaN and Infinity protection to prevent HWUI render crashes.
  * - Sub-zero environmental tolerance (supports -40°C to +100°C without freezing).
+ * - Proper de-initialization without false 36.6°C priors.
  * - Anomaly gating (rejects isolated hardware I2C bus read spikes > 6.0°C).
  * - Time-delta adaptive process noise scaling (prevents over/under filtering).
  */
@@ -22,7 +23,15 @@ public class KalmanFilter1D {
     }
 
     public synchronized void reset(float initialValue) {
-        if (Float.isNaN(initialValue) || Float.isInfinite(initialValue) || initialValue < -40.0f || initialValue > 100.0f) {
+        if (initialValue <= -40.0f || Float.isNaN(initialValue) || Float.isInfinite(initialValue)) {
+            // Explicit de-initialization: wait for genuine first measurement
+            this.x = -100.0f;
+            this.p = 1.0f;
+            this.lastUpdateMs = 0;
+            return;
+        }
+
+        if (initialValue > 100.0f) {
             this.x = 36.6f;
         } else {
             this.x = initialValue;
@@ -32,7 +41,7 @@ public class KalmanFilter1D {
     }
 
     public synchronized boolean isInitialized() {
-        return x > -40.0f && !Float.isNaN(x);
+        return x > -40.0f && !Float.isNaN(x) && !Float.isInfinite(x);
     }
 
     public synchronized float update(float measurement) {
@@ -41,8 +50,8 @@ public class KalmanFilter1D {
             return isInitialized() ? x : 36.6f;
         }
 
-        // Physiological / physical boundary check (-40°C to +90°C)
-        if (measurement < -40.0f || measurement > 90.0f) {
+        // Physiological / physical boundary check (-40°C to +95°C)
+        if (measurement < -40.0f || measurement > 95.0f) {
             return isInitialized() ? x : measurement;
         }
 

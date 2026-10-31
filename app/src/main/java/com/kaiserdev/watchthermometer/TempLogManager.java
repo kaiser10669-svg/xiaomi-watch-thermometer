@@ -39,8 +39,7 @@ public class TempLogManager {
 
         public String getModeLabel() {
             if (mode == 1) return "Висок";
-            if (mode == 2) return "Вода";
-            if (mode == 3) return "Воздух";
+            if (mode == 2) return "Воздух";
             return "Рука";
         }
     }
@@ -164,14 +163,17 @@ public class TempLogManager {
         report.maxTemp = maxC;
         report.avgTemp = Math.round((sumC / bodyHistory.size()) * 10f) / 10f;
 
+        String unit = isFahrenheit ? "°F" : "°C";
+
         // Clinical body trend calculation (comparing latest body reading to oldest in window)
         Entry latest = bodyHistory.get(0);
         Entry oldest = bodyHistory.get(Math.min(bodyHistory.size() - 1, 4));
         float trendDelta = Math.round((latest.tempBody - oldest.tempBody) * 10f) / 10f;
+        float dispTrend = isFahrenheit ? (trendDelta * 1.8f) : trendDelta;
         if (trendDelta >= 0.3f) {
-            report.trendStr = String.format(Locale.US, "Подъём (+%.1f°C)", trendDelta);
+            report.trendStr = String.format(Locale.US, "Подъём (+%.1f %s)", dispTrend, unit);
         } else if (trendDelta <= -0.3f) {
-            report.trendStr = String.format(Locale.US, "Снижение (%.1f°C)", trendDelta);
+            report.trendStr = String.format(Locale.US, "Снижение (%.1f %s)", dispTrend, unit);
         } else {
             report.trendStr = "Стабильная динамика";
         }
@@ -189,7 +191,6 @@ public class TempLogManager {
         }
 
         // Format for on-screen Dialog
-        String unit = isFahrenheit ? "°F" : "°C";
         float dispMin = isFahrenheit ? (minC * 1.8f + 32f) : minC;
         float dispMax = isFahrenheit ? (maxC * 1.8f + 32f) : maxC;
         float dispAvg = isFahrenheit ? (report.avgTemp * 1.8f + 32f) : report.avgTemp;

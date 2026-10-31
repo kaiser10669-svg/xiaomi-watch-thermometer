@@ -84,18 +84,26 @@ public class ThermometerComplicationService extends Service {
             try {
                 Intent bi = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
                 if (bi != null) {
-                    int btemp = bi.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1);
-                    if (btemp > 0) {
-                        float batteryC = btemp / 10.0f;
-                        if (batteryC >= 26.5f) {
-                            skinTemp = 32.1f + (batteryC - 28.0f) * 0.42f;
-                            if (skinTemp < 30.5f) skinTemp = 30.5f;
-                            if (skinTemp > 35.8f) skinTemp = 35.8f;
-                            float base = CircadianModel.getBaseline(System.currentTimeMillis());
-                            bodyEst = base + (skinTemp - 33.0f) * 0.42f + tempOffset;
-                        } else {
-                            skinTemp = batteryC;
-                            bodyEst = CircadianModel.getBaseline(System.currentTimeMillis()) + tempOffset;
+                    int status = bi.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+                    int plugged = bi.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0);
+                    boolean isCharging = (status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL);
+                    boolean isPlugged = (plugged != 0);
+
+                    // If watch is on charging dock, ignore hot battery readings to avoid false complication fever
+                    if (!isCharging && !isPlugged) {
+                        int btemp = bi.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1);
+                        if (btemp > 0) {
+                            float batteryC = btemp / 10.0f;
+                            if (batteryC >= 26.5f) {
+                                skinTemp = 32.1f + (batteryC - 28.0f) * 0.42f;
+                                if (skinTemp < 30.5f) skinTemp = 30.5f;
+                                if (skinTemp > 35.8f) skinTemp = 35.8f;
+                                float base = CircadianModel.getBaseline(System.currentTimeMillis());
+                                bodyEst = base + (skinTemp - 33.0f) * 0.42f + tempOffset;
+                            } else {
+                                skinTemp = batteryC;
+                                bodyEst = CircadianModel.getBaseline(System.currentTimeMillis()) + tempOffset;
+                            }
                         }
                     }
                 }
@@ -132,10 +140,13 @@ public class ThermometerComplicationService extends Service {
                     .setIcon(icon)
                     .setTapAction(tapAction);
         } else if (type == ComplicationData.TYPE_RANGED_VALUE) {
+            float minVal = isFahrenheit ? (34.0f * 1.8f + 32f) : 34.0f;
+            float maxVal = isFahrenheit ? (42.0f * 1.8f + 32f) : 42.0f;
+            float curVal = isFahrenheit ? dispBody : bodyEst;
             builder = new ComplicationData.Builder(ComplicationData.TYPE_RANGED_VALUE)
-                    .setRangedValue(bodyEst)
-                    .setRangedMinValue(34.0f)
-                    .setRangedMaxValue(42.0f)
+                    .setRangedValue(curVal)
+                    .setRangedMinValue(minVal)
+                    .setRangedMaxValue(maxVal)
                     .setShortText(ComplicationText.plainText(bodyStr))
                     .setShortTitle(ComplicationText.plainText("ТЕЛО"))
                     .setIcon(icon)

@@ -3,16 +3,25 @@ package com.kaiserdev.watchthermometer;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.media.AudioAttributes;
+import android.media.AudioFocusRequest;
+import android.media.AudioManager;
 import android.os.Build;
 import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
 
 import java.util.Locale;
 
 public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
 
     private static final String PREF_VOICE_MUTED = "voice_muted";
+    private static final String UTTERANCE_ID = "THERMOMETER_ANNOUNCE";
+
     private final Context appContext;
     private TextToSpeech tts;
+    private AudioManager audioManager;
+    private AudioAttributes audioAttributes;
+    private Object focusRequestObj; // AudioFocusRequest on API 26+
+
     private boolean isReady = false;
     private boolean isMuted = false;
     private boolean fallbackAttempted = false;
@@ -21,6 +30,14 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
         this.appContext = context.getApplicationContext();
         SharedPreferences sp = appContext.getSharedPreferences(ThermometerComplicationService.PREFS_NAME, Context.MODE_PRIVATE);
         this.isMuted = sp.getBoolean(PREF_VOICE_MUTED, false);
+        this.audioManager = (AudioManager) appContext.getSystemService(Context.AUDIO_SERVICE);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            audioAttributes = new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build();
+        }
 
         initTtsEngine();
     }
@@ -50,13 +67,25 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
             tts.setSpeechRate(0.92f); // Clear, articulate cadence for watch speaker
             tts.setPitch(1.05f);
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                AudioAttributes attrs = new AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                        .build();
-                tts.setAudioAttributes(attrs);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && audioAttributes != null) {
+                tts.setAudioAttributes(audioAttributes);
             }
+
+            tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                @Override
+                public void onStart(String utteranceId) {}
+
+                @Override
+                public void onDone(String utteranceId) {
+                    abandonFocus();
+                }
+
+                @Override
+                public void onError(String utteranceId) {
+                    abandonFocus();
+                }
+            });
+
             isReady = true;
         } else {
             if (!fallbackAttempted) {
@@ -74,6 +103,33 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
             }
             isReady = false;
         }
+    }
+
+    private void requestFocus() {
+        if (audioManager == null) return;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && audioAttributes != null) {
+                AudioFocusRequest afr = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+                        .setAudioAttributes(audioAttributes)
+                        .build();
+                focusRequestObj = afr;
+                audioManager.requestAudioFocus(afr);
+            } else {
+                audioManager.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK);
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    private void abandonFocus() {
+        if (audioManager == null) return;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && focusRequestObj instanceof AudioFocusRequest) {
+                audioManager.abandonAudioFocusRequest((AudioFocusRequest) focusRequestObj);
+                focusRequestObj = null;
+            } else {
+                audioManager.abandonAudioFocus(null);
+            }
+        } catch (Throwable ignored) {}
     }
 
     public void speakTemperature(float tempC, boolean isFahrenheit) {
@@ -152,55 +208,19 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
         speak(phrase);
     }
 
-    public void speakWater(float tempC, boolean isFahrenheit) {
-        if (!isReady || isMuted || tts == null) return;
-
-        String advice;
-        if (tempC < 15.0f) {
-            advice = "Ледяная купель для моржевания.";
-        } else if (tempC <= 28.5f) {
-            advice = "Бодрящая вода для плавания.";
-        } else if (tempC <= 35.9f) {
-            advice = "Приятная теплая вода.";
-        } else if (tempC <= 38.5f) {
-            advice = "Идеально для купания ребенка!";
-        } else if (tempC <= 41.5f) {
-            advice = "Горячая расслабляющая ванна.";
-        } else {
-            advice = "Внимание! Слишком горячо! Опасность ожога!";
-        }
-
-        String phrase;
-        if (isFahrenheit) {
-            float f = tempC * 1.8f + 32f;
-            int whole = (int) f;
-            int decimal = Math.round((f - whole) * 10f);
-            if (decimal == 10) { whole++; decimal = 0; }
-            phrase = String.format(Locale.US, "Температура воды %d и %d градусов Фаренгейта. %s", whole, decimal, advice);
-        } else {
-            int whole = (int) tempC;
-            int decimal = Math.round((tempC - whole) * 10f);
-            if (decimal == 10) { whole++; decimal = 0; }
-
-            if (decimal == 0) {
-                phrase = String.format(Locale.US, "Температура воды %d градусов. %s", whole, advice);
-            } else {
-                phrase = String.format(Locale.US, "Температура воды %d и %d. %s", whole, decimal, advice);
-            }
-        }
-
-        speak(phrase);
-    }
 
     private void speak(String text) {
         if (tts == null || !isReady) return;
+        requestFocus();
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "THERMOMETER_ANNOUNCE");
+                tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, UTTERANCE_ID);
             } else {
                 tts.speak(text, TextToSpeech.QUEUE_FLUSH, null);
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {
+            abandonFocus();
+        }
     }
 
     public void stop() {
@@ -209,6 +229,7 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
                 tts.stop();
             } catch (Throwable ignored) {}
         }
+        abandonFocus();
     }
 
     public void setMuted(boolean muted) {
@@ -230,6 +251,7 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
     }
 
     public void destroy() {
+        abandonFocus();
         if (tts != null) {
             try {
                 tts.stop();

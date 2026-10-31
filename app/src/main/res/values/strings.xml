@@ -2,11 +2,8 @@
 <resources>
     <string name="app_name">Термометр</string>
     <string name="title_skin_temp">ТЕМПЕРАТУРА КОЖИ</string>
-    <string name="title_ambient_temp">ВОЗДУХ (БАРОМЕТР)</string>
+    <string name="title_ambient_temp">ВОЗДУХ</string>
     <string name="title_battery_temp">БАТАРЕЯ</string>
-    <string name="waiting_sensor">Ожидание...</string>
-    <string name="sensor_status">Датчик Goodix Skin Temp</string>
-    <string name="btn_refresh">Обновить</string>
     <string name="complication_label">Термометр</string>
     <string name="complication_desc">Температура кожи и воздуха на циферблате</string>
 </resources>

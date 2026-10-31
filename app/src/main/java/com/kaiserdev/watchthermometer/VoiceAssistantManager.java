@@ -109,6 +109,43 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
         speak(phrase);
     }
 
+    public void speakBeverage(float tempC, boolean isFahrenheit) {
+        if (!isReady || isMuted || tts == null) return;
+
+        int whole = (int) tempC;
+        int decimal = Math.round((tempC - whole) * 10f);
+        if (decimal == 10) { whole++; decimal = 0; }
+
+        String advice;
+        if (tempC > 65.0f) {
+            advice = "Осторожно! Напиток обжигающе горячий! Опасность ожога языка!";
+        } else if (tempC >= 55.0f) {
+            advice = "Идеальная температура для кофе или чая. Можно пить!";
+        } else if (tempC >= 45.0f) {
+            advice = "Тёплый комфортный напиток.";
+        } else {
+            advice = "Напиток остыл. Можно подогреть.";
+        }
+
+        String phrase = String.format(Locale.US, "Температура напитка %d градусов. %s", whole, advice);
+        speak(phrase);
+    }
+
+    public void speakLieDetector(int verdictType, int scorePercent) {
+        if (!isReady || isMuted || tts == null) return;
+
+        String phrase;
+        if (verdictType == 0) {
+            phrase = String.format(Locale.US, "Тест завершен! Абсолютный дзен! Вероятность правды %d процентов.", scorePercent);
+        } else if (verdictType == 1) {
+            phrase = String.format(Locale.US, "Зафиксировано легкое волнение. Уровень правды %d процентов.", scorePercent);
+        } else {
+            phrase = String.format(Locale.US, "Внимание! Детектор лжи звенит! Резкий спазм сосудов, вероятность стресса %d процентов!", scorePercent);
+        }
+
+        speak(phrase);
+    }
+
     private void speak(String text) {
         if (tts == null) return;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {

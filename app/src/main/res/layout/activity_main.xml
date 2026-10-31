@@ -475,7 +475,7 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- Thermal Comfort Balance Card (Delta T = Skin - Ambient) -->
+            <!-- Thermal Comfort Balance Card with Thermogenesis Calories -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -516,6 +516,17 @@
                     android:textSize="10sp"
                     android:textStyle="bold"
                     android:layout_marginTop="2dp" />
+
+                <!-- Thermogenesis Calorie Burn (Feature 4) -->
+                <TextView
+                    android:id="@+id/tvThermogenesisCalories"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="⚡ Термогенез: ~140 ккал/ч на обогрев"
+                    android:textColor="@color/accent_orange"
+                    android:textSize="9sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="3dp" />
 
                 <TextView
                     android:id="@+id/tvThermalDesc"
@@ -641,7 +652,7 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- ==================== WATER / BATH MODE CONTAINER (NEW!) ==================== -->
+        <!-- ==================== WATER / BATH MODE CONTAINER ==================== -->
         <LinearLayout
             android:id="@+id/layoutWaterMode"
             android:layout_width="match_parent"
@@ -834,7 +845,235 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- ==================== FEVER ADVISOR & MED TIMER CARD (NEW!) ==================== -->
+        <!-- ==================== 🧪 ТЕРМО-ЛАБОРАТОРИЯ & ПРИКОЛЫ (NEW!) ==================== -->
+        <LinearLayout
+            android:id="@+id/layoutLabSection"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_card"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
+            android:paddingLeft="12dp"
+            android:paddingRight="12dp"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🧪 ТЕРМО-ЛАБОРАТОРИЯ"
+                android:textColor="@color/accent_orange"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.04"
+                android:layout_marginBottom="6dp" />
+
+            <!-- 3 Lab Switch Buttons -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="26dp"
+                android:orientation="horizontal"
+                android:layout_marginBottom="8dp">
+
+                <Button
+                    android:id="@+id/btnToolLie"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/tab_selected_bg"
+                    android:text="🕵️ ПОЛИГРАФ"
+                    android:textColor="#FFFFFF"
+                    android:textSize="8sp"
+                    android:textStyle="bold"
+                    android:padding="0dp"
+                    android:layout_marginEnd="2dp" />
+
+                <Button
+                    android:id="@+id/btnToolWarmer"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/btn_secondary_bg"
+                    android:text="🔥 ГРЕЛКА"
+                    android:textColor="@color/text_title"
+                    android:textSize="8sp"
+                    android:textStyle="bold"
+                    android:padding="0dp"
+                    android:layout_marginEnd="2dp" />
+
+                <Button
+                    android:id="@+id/btnToolCoffee"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/btn_secondary_bg"
+                    android:text="☕ КОФЕ"
+                    android:textColor="@color/text_title"
+                    android:textSize="8sp"
+                    android:textStyle="bold"
+                    android:padding="0dp" />
+            </LinearLayout>
+
+            <!-- SUB-CONTAINER 1: Thermal Lie Detector / Stress Biofeedback -->
+            <LinearLayout
+                android:id="@+id/layoutToolLieContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <TextView
+                    android:id="@+id/tvLieTip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Прижмите палец к сенсору и задайте вопрос"
+                    android:textColor="@color/text_title"
+                    android:textSize="8sp"
+                    android:layout_marginBottom="6dp" />
+
+                <Button
+                    android:id="@+id/btnStartLieTest"
+                    android:layout_width="match_parent"
+                    android:layout_height="32dp"
+                    android:background="@drawable/btn_measure_bg"
+                    android:text="⏱️ НАЧАТЬ ТЕСТ (15 сек)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="9sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvLieCountdown"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="15 сек... Сканирование капилляров"
+                    android:textColor="@color/accent_orange"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="6dp"
+                    android:visibility="gone" />
+
+                <!-- Result -->
+                <LinearLayout
+                    android:id="@+id/layoutLieResult"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:layout_marginTop="6dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/tvLieVerdict"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🧘 Абсолютный дзен (Правда 98%)"
+                        android:textColor="@color/green_temp"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="4dp" />
+
+                    <ImageButton
+                        android:id="@+id/btnSpeakLieResult"
+                        android:layout_width="26dp"
+                        android:layout_height="26dp"
+                        android:background="@drawable/btn_circle_bg"
+                        android:src="@drawable/ic_volume_up"
+                        android:padding="3dp"
+                        android:contentDescription="Озвучить" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- SUB-CONTAINER 2: Hand Warmer Mode -->
+            <LinearLayout
+                android:id="@+id/layoutToolWarmerContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Прижмите замерзшие пальцы к стеклу часов"
+                    android:textColor="@color/text_title"
+                    android:textSize="8sp"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:id="@+id/tvWarmerStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Грелка выключена • Лимит 40°C"
+                    android:textColor="@color/text_white"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="6dp" />
+
+                <Button
+                    android:id="@+id/btnToggleWarmer"
+                    android:layout_width="match_parent"
+                    android:layout_height="32dp"
+                    android:background="@drawable/btn_measure_bg"
+                    android:text="🔥 ВКЛЮЧИТЬ ГРЕЛКУ (60 сек)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="9sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- SUB-CONTAINER 3: Coffee / Beverage Sip Checker -->
+            <LinearLayout
+                android:id="@+id/layoutToolCoffeeContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/tvCoffeeTemp"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="--.- °C"
+                    android:textColor="@color/text_white"
+                    android:textSize="22sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvCoffeeBadge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Прикоснитесь сенсором к кружке"
+                    android:textColor="@color/text_title"
+                    android:textSize="9sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="6dp" />
+
+                <Button
+                    android:id="@+id/btnStartCoffeeMeasure"
+                    android:layout_width="match_parent"
+                    android:layout_height="32dp"
+                    android:background="@drawable/btn_measure_bg"
+                    android:text="⏱️ ЗАМЕРИТЬ НАПИТОК (5 сек)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="9sp"
+                    android:textStyle="bold" />
+
+                <ImageButton
+                    android:id="@+id/btnSpeakCoffeeResult"
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:background="@drawable/btn_circle_bg"
+                    android:src="@drawable/ic_volume_up"
+                    android:layout_marginTop="4dp"
+                    android:padding="3dp"
+                    android:contentDescription="Озвучить"
+                    android:visibility="gone" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ==================== FEVER ADVISOR & MED TIMER CARD ==================== -->
         <LinearLayout
             android:id="@+id/layoutFeverAdvisor"
             android:layout_width="match_parent"
@@ -1187,7 +1426,7 @@
             android:id="@+id/tvSensorList"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Xiaomi Watch 5 • Wear OS • v3.0.0"
+            android:text="Xiaomi Watch 5 • Wear OS • v3.1.0"
             android:textColor="@color/text_title"
             android:textSize="9sp"
             android:gravity="center" />

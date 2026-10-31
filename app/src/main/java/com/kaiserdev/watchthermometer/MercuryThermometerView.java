@@ -17,6 +17,14 @@ import android.view.animation.DecelerateInterpolator;
 public class MercuryThermometerView extends View {
 
     private float currentTemp = 36.6f;
+    private boolean isFahrenheit = false;
+
+    public void setFahrenheit(boolean fahrenheit) {
+        if (this.isFahrenheit != fahrenheit) {
+            this.isFahrenheit = fahrenheit;
+            invalidate();
+        }
+    }
     private float animatedTemp = 36.6f;
     private ValueAnimator animator;
 
@@ -223,29 +231,52 @@ public class MercuryThermometerView extends View {
         float majorTickY1 = tubeBottom + dp(2f);
         float majorTickY2 = majorTickY1 + dp(4f);
         float textY = majorTickY2 + dp(9f);
-
-        for (int t = 34; t <= 42; t++) {
-            float tickFrac = (t - MIN_SCALE_TEMP) / (MAX_SCALE_TEMP - MIN_SCALE_TEMP);
-            float tx = tubeStartX + scaleLength * tickFrac;
-            canvas.drawLine(tx, majorTickY1, tx, majorTickY2, tickMajorPaint);
-            if (t % 2 == 0) {
-                canvas.drawText(String.valueOf(t), tx, textY, textPaint);
-            }
-        }
-
-        // Minor ticks (every 0.2°C, avoiding whole degrees)
         float minorTickY1 = tubeBottom + dp(2f);
         float minorTickY2 = minorTickY1 + dp(2.2f);
-        for (int step = 1; step < 40; step++) {
-            if (step % 5 == 0) continue; // Whole degree already drawn
-            float t = MIN_SCALE_TEMP + step * 0.2f;
-            float tickFrac = (t - MIN_SCALE_TEMP) / (MAX_SCALE_TEMP - MIN_SCALE_TEMP);
-            float tx = tubeStartX + scaleLength * tickFrac;
-            canvas.drawLine(tx, minorTickY1, tx, minorTickY2, tickMinorPaint);
+
+        float goldFrac;
+        if (!isFahrenheit) {
+            // Celsius Scale (34°C - 42°C, Golden mark at 36.6°C)
+            for (int t = 34; t <= 42; t++) {
+                float tickFrac = (t - MIN_SCALE_TEMP) / (MAX_SCALE_TEMP - MIN_SCALE_TEMP);
+                float tx = tubeStartX + scaleLength * tickFrac;
+                canvas.drawLine(tx, majorTickY1, tx, majorTickY2, tickMajorPaint);
+                if (t % 2 == 0) {
+                    canvas.drawText(String.valueOf(t), tx, textY, textPaint);
+                }
+            }
+
+            for (int step = 1; step < 40; step++) {
+                if (step % 5 == 0) continue;
+                float t = MIN_SCALE_TEMP + step * 0.2f;
+                float tickFrac = (t - MIN_SCALE_TEMP) / (MAX_SCALE_TEMP - MIN_SCALE_TEMP);
+                float tx = tubeStartX + scaleLength * tickFrac;
+                canvas.drawLine(tx, minorTickY1, tx, minorTickY2, tickMinorPaint);
+            }
+            goldFrac = (36.6f - MIN_SCALE_TEMP) / (MAX_SCALE_TEMP - MIN_SCALE_TEMP);
+        } else {
+            // Fahrenheit Scale (94°F - 106°F, Golden medical mark at 98.6°F)
+            float minF = MIN_SCALE_TEMP * 1.8f + 32f; // 93.2°F
+            float maxF = MAX_SCALE_TEMP * 1.8f + 32f; // 107.6°F
+
+            for (int f = 94; f <= 106; f += 2) {
+                float tickFrac = (f - minF) / (maxF - minF);
+                float tx = tubeStartX + scaleLength * tickFrac;
+                canvas.drawLine(tx, majorTickY1, tx, majorTickY2, tickMajorPaint);
+                canvas.drawText(String.valueOf(f), tx, textY, textPaint);
+            }
+
+            for (int f10 = 940; f10 <= 1060; f10 += 5) {
+                if (f10 % 20 == 0) continue;
+                float fVal = f10 / 10.0f;
+                float tickFrac = (fVal - minF) / (maxF - minF);
+                float tx = tubeStartX + scaleLength * tickFrac;
+                canvas.drawLine(tx, minorTickY1, tx, minorTickY2, tickMinorPaint);
+            }
+            goldFrac = (98.6f - minF) / (maxF - minF);
         }
 
-        // Classic Golden 36.6°C Arrow and Line
-        float goldFrac = (36.6f - MIN_SCALE_TEMP) / (MAX_SCALE_TEMP - MIN_SCALE_TEMP);
+        // Classic Golden Arrow and Line
         float gx = tubeStartX + scaleLength * goldFrac;
         canvas.drawLine(gx, tubeTop - dp(4f), gx, tubeBottom + dp(3f), goldMarkPaint);
 

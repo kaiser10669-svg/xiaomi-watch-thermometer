@@ -50,15 +50,20 @@ public class CircadianModel {
     }
 
     /**
-     * Returns human-readable deviation string.
+     * Returns human-readable deviation string aligned with selected unit.
      */
-    public static String formatDeviation(float dev) {
-        if (Math.abs(dev) < 0.05f) {
+    public static String formatDeviation(float dev, boolean isFahrenheit) {
+        float d = isFahrenheit ? (dev * 1.8f) : dev;
+        if (Math.abs(d) < 0.05f) {
             return "±0.0°";
-        } else if (dev > 0) {
-            return String.format(Locale.US, "+%.1f°", dev);
+        } else if (d > 0) {
+            return String.format(Locale.US, "+%.1f°", d);
         } else {
-            return String.format(Locale.US, "%.1f°", dev);
+            return String.format(Locale.US, "%.1f°", d);
         }
+    }
+
+    public static String formatDeviation(float dev) {
+        return formatDeviation(dev, false);
     }
 }

@@ -2054,7 +2054,7 @@
 
             android:layout_height="wrap_content"
 
-            android:text="Xiaomi Watch 5 • Clinical v4.0.0"
+            android:text="Xiaomi Watch 5 • Clinical v4.1.0"
 
             android:textColor="@color/text_title"
 

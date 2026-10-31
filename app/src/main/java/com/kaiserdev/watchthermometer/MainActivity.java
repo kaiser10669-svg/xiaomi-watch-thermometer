@@ -814,7 +814,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
 
         if (tvSensorList != null) {
-            tvSensorList.setText("Xiaomi Watch 5 • Clinical v4.0.0");
+            tvSensorList.setText("Xiaomi Watch 5 • Clinical v4.1.0");
         }
     }
 
@@ -1023,7 +1023,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             if (mercuryViewTemple != null) {
                 mercuryViewTemple.setTemperature(liveTempleBody, true);
             }
-        } else if (lastMeasuredBodyTemple > 0 && lastMeasuredBodyTemple != 36.6f) {
+        } else if (lastMeasuredBodyTemple > 0) {
             tvTempleTemp.setText(formatTemp(lastMeasuredBodyTemple));
             if (mercuryViewTemple != null) {
                 mercuryViewTemple.setTemperature(lastMeasuredBodyTemple, true);
@@ -1101,7 +1101,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
         // Circadian Deviation (Apple/Garmin Baseline Tracking)
         float circadianDev = CircadianModel.getDeviation(filteredBody, now);
-        String devStr = CircadianModel.formatDeviation(circadianDev);
+        String devStr = CircadianModel.formatDeviation(circadianDev, isFahrenheit);
 
         // Primary Display: Smooth kinetic odometer animation
         animateBodyTempDisplay(filteredBody);
@@ -1164,9 +1164,15 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             tvAdvisorStatus.setTextColor(Color.parseColor("#9E9E9E"));
             tvAdvisorAdvice.setText("Для обновления советов и свежей температуры наденьте часы на руку.");
         } else {
-            tvAdvisorStatus.setText("ℹ️ Ожидание замера");
-            tvAdvisorStatus.setTextColor(Color.parseColor("#9E9E9E"));
-            tvAdvisorAdvice.setText("Наденьте часы на руку или выполните замер на виске.");
+            if (isPlugged || isCharging) {
+                tvAdvisorStatus.setText("⚡ Часы на зарядке");
+                tvAdvisorStatus.setTextColor(Color.parseColor("#FFD600"));
+                tvAdvisorAdvice.setText("Снимите часы с зарядки и наденьте на руку.");
+            } else {
+                tvAdvisorStatus.setText("ℹ️ Ожидание замера");
+                tvAdvisorStatus.setTextColor(Color.parseColor("#9E9E9E"));
+                tvAdvisorAdvice.setText("Наденьте часы на руку или выполните замер на виске.");
+            }
         }
     }
 
@@ -1199,6 +1205,22 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
     private void updateThermalBalance(float skinVal, float ambientVal) {
         if (tvDeltaT == null) return;
+
+        boolean reallyOnWrist = !isPlugged && !isCharging && (isOnWrist || (lastHeartRateBpm >= 40.0f && (System.currentTimeMillis() - lastHeartRateTimestampMs < 8000))) && (skinVal >= 16.0f);
+        if (!reallyOnWrist) {
+            tvDeltaT.setText("--.- " + (isFahrenheit ? "°F" : "°C"));
+            if (isPlugged || isCharging) {
+                tvThermalStatus.setText("⚡ На зарядке");
+                tvThermalStatus.setTextColor(Color.parseColor("#FFD600"));
+                tvThermalDesc.setText("Тепловой баланс рассчитывается на руке");
+            } else {
+                tvThermalStatus.setText("⚠️ Часы сняты с руки");
+                tvThermalStatus.setTextColor(Color.parseColor("#9E9E9E"));
+                tvThermalDesc.setText("Наденьте часы для расчёта баланса");
+            }
+            return;
+        }
+
         float amb = ambientVal > 0 ? ambientVal : (lastBatteryTemp > 0 ? lastBatteryTemp - 2.5f : 24.0f);
         float delta = skinVal - amb;
 
@@ -1336,7 +1358,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         finalBody = Math.round(finalBody * 10f) / 10f;
 
         float circadianDev = CircadianModel.getDeviation(finalBody, now);
-        String devStr = CircadianModel.formatDeviation(circadianDev);
+        String devStr = CircadianModel.formatDeviation(circadianDev, isFahrenheit);
 
         lastMeasuredBodyWrist = finalBody;
         currentCalculatedBody = finalBody;
@@ -1804,10 +1826,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         setWakeLockActive(false);
         if (isMeasuring) cancelMeasurement();
         if (isTempleMeasuring) {
-            isTempleMeasuring = false;
-            uiHandler.removeCallbacks(templeCountdownRunnable);
-            tvTempleCountdown.setVisibility(View.GONE);
-            btnStartTempleMeasure.setVisibility(View.VISIBLE);
+            cancelTempleMeasurement();
         }
 
         if (isRoomMeasuring) {

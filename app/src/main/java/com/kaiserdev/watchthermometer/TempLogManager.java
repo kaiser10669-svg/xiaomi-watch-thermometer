@@ -21,20 +21,24 @@ public class TempLogManager {
 
     private static final String PREFS_NAME = "watch_thermometer_prefs";
     private static final String PREF_HISTORY_KEY = "temp_history_json";
-    private static final int MAX_ENTRIES = 12;
+    private static final int MAX_ENTRIES = 16;
 
     public static class Entry {
         public long timestamp;
         public float tempBody;
         public float tempSkin;
         public int mode; // 0=wrist, 1=temple, 2=water, 3=room
-        public float deltaPrev; // difference to previous record
+        public float deltaPrev; // difference to previous record in Celsius
 
         public String getFormattedTime() {
             long diff = System.currentTimeMillis() - timestamp;
             if (diff < 60000) return "Только что";
             if (diff < 3600000) return (diff / 60000) + " мин назад";
-            SimpleDateFormat sdf = new SimpleDateFormat("HH:mm", Locale.getDefault());
+            if (diff < 12 * 3600000) {
+                SimpleDateFormat sdf = new SimpleDateFormat("HH:mm", Locale.getDefault());
+                return sdf.format(new Date(timestamp));
+            }
+            SimpleDateFormat sdf = new SimpleDateFormat("dd.MM HH:mm", Locale.getDefault());
             return sdf.format(new Date(timestamp));
         }
 
@@ -44,6 +48,16 @@ public class TempLogManager {
             if (mode == 3) return "Воздух";
             return "Рука";
         }
+    }
+
+    public static class ClinicalReport {
+        public int totalCount;
+        public float minTemp;
+        public float maxTemp;
+        public float avgTemp;
+        public String statusSummary;
+        public String trendStr;
+        public String formattedReport;
     }
 
     public static synchronized void saveRecord(Context context, float body, float skin, int mode) {
@@ -110,6 +124,85 @@ public class TempLogManager {
                 .edit().remove(PREF_HISTORY_KEY).apply();
     }
 
+    public static ClinicalReport buildClinicalReport(Context context, boolean isFahrenheit) {
+        ClinicalReport report = new ClinicalReport();
+        List<Entry> history = getHistory(context);
+        report.totalCount = history.size();
+
+        if (history.isEmpty()) {
+            report.statusSummary = "История измерений пуста";
+            report.trendStr = "Нет данных";
+            report.formattedReport = "Журнал измерений пуст.\nСделайте замер температуры на руке или виске.";
+            return report;
+        }
+
+        float minC = Float.MAX_VALUE;
+        float maxC = -Float.MAX_VALUE;
+        float sumC = 0;
+        int bodyCount = 0;
+
+        for (Entry e : history) {
+            if (e.mode == 0 || e.mode == 1) { // Wrist or Temple body readings
+                minC = Math.min(minC, e.tempBody);
+                maxC = Math.max(maxC, e.tempBody);
+                sumC += e.tempBody;
+                bodyCount++;
+            }
+        }
+
+        if (bodyCount == 0) {
+            report.statusSummary = "Только замеры среды/воды";
+            report.trendStr = "—";
+            report.formattedReport = "В журнале пока нет замеров температуры тела.";
+            return report;
+        }
+
+        report.minTemp = minC;
+        report.maxTemp = maxC;
+        report.avgTemp = Math.round((sumC / bodyCount) * 10f) / 10f;
+
+        // Trend calculation
+        Entry latest = history.get(0);
+        Entry oldest = history.get(Math.min(history.size() - 1, 4));
+        float trendDelta = latest.tempBody - oldest.tempBody;
+        if (trendDelta >= 0.3f) {
+            report.trendStr = String.format(Locale.US, "Подъём (+%.1f°C)", trendDelta);
+        } else if (trendDelta <= -0.3f) {
+            report.trendStr = String.format(Locale.US, "Снижение (%.1f°C)", trendDelta);
+        } else {
+            report.trendStr = "Стабильная динамика";
+        }
+
+        if (maxC > 38.5f) {
+            report.statusSummary = "Высокая лихорадка";
+        } else if (maxC > 38.0f) {
+            report.statusSummary = "Умеренная лихорадка";
+        } else if (maxC > 37.2f) {
+            report.statusSummary = "Субфебрилитет";
+        } else if (minC < 35.5f) {
+            report.statusSummary = "Гипотермия";
+        } else {
+            report.statusSummary = "В пределах нормы";
+        }
+
+        // Format for on-screen Dialog
+        String unit = isFahrenheit ? "°F" : "°C";
+        float dispMin = isFahrenheit ? (minC * 1.8f + 32f) : minC;
+        float dispMax = isFahrenheit ? (maxC * 1.8f + 32f) : maxC;
+        float dispAvg = isFahrenheit ? (report.avgTemp * 1.8f + 32f) : report.avgTemp;
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("📊 Статус: ").append(report.statusSummary).append("\n\n");
+        sb.append(String.format(Locale.US, "• Максимум: %.1f %s\n", dispMax, unit));
+        sb.append(String.format(Locale.US, "• Средняя:  %.1f %s\n", dispAvg, unit));
+        sb.append(String.format(Locale.US, "• Минимум:  %.1f %s\n\n", dispMin, unit));
+        sb.append("• Тренд: ").append(report.trendStr).append("\n");
+        sb.append("• Замеров в базе: ").append(bodyCount);
+
+        report.formattedReport = sb.toString();
+        return report;
+    }
+
     public static String exportDoctorReport(Context context) {
         if (context == null) return null;
         List<Entry> history = getHistory(context);
@@ -133,7 +226,7 @@ public class TempLogManager {
             int count = 0;
 
             for (Entry e : history) {
-                if (e.mode != 2 && e.mode != 3) { // Body temperatures
+                if (e.mode != 2 && e.mode != 3) {
                     minT = Math.min(minT, e.tempBody);
                     maxT = Math.max(maxT, e.tempBody);
                     sumT += e.tempBody;
@@ -178,7 +271,6 @@ public class TempLogManager {
         sb.append("================================================\n");
         sb.append("Сгенерировано приложением Xiaomi Watch Thermometer\n");
 
-        // Write to Download/medical_temp_report.txt
         File targetFile = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "medical_temp_report.txt");
         try {
             if (!targetFile.getParentFile().exists()) {
@@ -189,7 +281,6 @@ public class TempLogManager {
             }
             return targetFile.getAbsolutePath();
         } catch (Exception e) {
-            // Fallback to app external files dir
             try {
                 File fallback = new File(context.getExternalFilesDir(null), "medical_temp_report.txt");
                 try (OutputStreamWriter writer = new OutputStreamWriter(new FileOutputStream(fallback), StandardCharsets.UTF_8)) {

@@ -2,6 +2,10 @@ package com.kaiserdev.watchthermometer;
 
 import android.animation.ValueAnimator;
 import android.app.Activity;
+import android.app.AlarmManager;
+import android.app.AlertDialog;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -124,29 +128,6 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     private Button btnStartRoomMeasure;
     private TextView tvRoomCountdown;
 
-    // --- Lab & Tricks Views ---
-    private Button btnToolLie;
-    private Button btnToolWarmer;
-    private Button btnToolCoffee;
-
-    private View layoutToolLieContainer;
-    private Button btnStartLieTest;
-    private TextView tvLieCountdown;
-    private View layoutLieResult;
-    private TextView tvLieVerdict;
-    private ImageButton btnSpeakLieResult;
-
-    private View layoutToolWarmerContainer;
-    private TextView tvWarmerStatus;
-    private Button btnToggleWarmer;
-    private final HandWarmerController handWarmer = new HandWarmerController();
-
-    private View layoutToolCoffeeContainer;
-    private TextView tvCoffeeTemp;
-    private TextView tvCoffeeBadge;
-    private Button btnStartCoffeeMeasure;
-    private ImageButton btnSpeakCoffeeResult;
-
     // Fever Advisor & Med Timer Views
     private TextView tvAdvisorStatus;
     private TextView tvAdvisorAdvice;
@@ -200,7 +181,6 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     private boolean isFahrenheit = false;
     private float tempOffset = 0.0f;
     private int currentMode = 0; // 0=wrist, 1=temple, 2=water, 3=room
-    private int currentLabTool = 0; // 0=lie, 1=warmer, 2=coffee
 
     // Measurement States
     private boolean isMeasuring = false;
@@ -220,19 +200,6 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
     private boolean isRoomMeasuring = false;
     private int roomSecondsLeft = 60;
-
-    // Lie Detector States
-    private boolean isLieTesting = false;
-    private int lieSecondsLeft = 15;
-    private final List<Float> lieSamples = new ArrayList<>();
-    private int lastLieVerdictType = 0;
-    private int lastLieScore = 98;
-
-    // Coffee Test States
-    private boolean isCoffeeMeasuring = false;
-    private int coffeeSecondsLeft = 5;
-    private final List<Float> coffeeSamples = new ArrayList<>();
-    private float lastMeasuredCoffee = 58.0f;
 
     private float currentCalculatedSkin = -1.0f;
     private float currentCalculatedBody = -1.0f;
@@ -274,31 +241,11 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
     };
 
-    private final Runnable lieCountdownRunnable = new Runnable() {
-        @Override
-        public void run() {
-            tickLieTest();
-        }
-    };
-
-    private final Runnable coffeeCountdownRunnable = new Runnable() {
-        @Override
-        public void run() {
-            tickCoffeeMeasure();
-        }
-    };
-
     @Override
     public void run() {
         pollThermalSources();
         recalculateAndDisplay();
         updateMedTimerView();
-
-        if (handWarmer.isRunning()) {
-            float checkT = hardwareSkinTemp > 0 ? hardwareSkinTemp : (lastBatteryTemp > 0 ? lastBatteryTemp : 36.0f);
-            handWarmer.tick(checkT);
-            handWarmer.updateSafetyCheck(checkT);
-        }
 
         uiHandler.postDelayed(this, 1500);
     }
@@ -337,7 +284,18 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         batteryReceiver = new BatteryReceiver(this);
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            List<String> perms = new ArrayList<>();
+            if (checkSelfPermission("android.permission.BODY_SENSORS") != PackageManager.PERMISSION_GRANTED) {
+                perms.add("android.permission.BODY_SENSORS");
+            }
+            if (checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED) {
+                perms.add("android.permission.POST_NOTIFICATIONS");
+            }
+            if (!perms.isEmpty()) {
+                requestPermissions(perms.toArray(new String[0]), 101);
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (checkSelfPermission("android.permission.BODY_SENSORS") != PackageManager.PERMISSION_GRANTED) {
                 requestPermissions(new String[]{"android.permission.BODY_SENSORS"}, 101);
             }
@@ -350,7 +308,6 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         updateVoiceButton();
         updateHistoryView();
         updateMedTimerView();
-        switchLabTool(0);
         recalculateAndDisplay();
     }
 
@@ -443,28 +400,6 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         tvRoomStatus = (TextView) findViewById(R.id.tvRoomStatus);
         btnStartRoomMeasure = (Button) findViewById(R.id.btnStartRoomMeasure);
         tvRoomCountdown = (TextView) findViewById(R.id.tvRoomCountdown);
-
-        // Lab Tools
-        btnToolLie = (Button) findViewById(R.id.btnToolLie);
-        btnToolWarmer = (Button) findViewById(R.id.btnToolWarmer);
-        btnToolCoffee = (Button) findViewById(R.id.btnToolCoffee);
-
-        layoutToolLieContainer = findViewById(R.id.layoutToolLieContainer);
-        btnStartLieTest = (Button) findViewById(R.id.btnStartLieTest);
-        tvLieCountdown = (TextView) findViewById(R.id.tvLieCountdown);
-        layoutLieResult = findViewById(R.id.layoutLieResult);
-        tvLieVerdict = (TextView) findViewById(R.id.tvLieVerdict);
-        btnSpeakLieResult = (ImageButton) findViewById(R.id.btnSpeakLieResult);
-
-        layoutToolWarmerContainer = findViewById(R.id.layoutToolWarmerContainer);
-        tvWarmerStatus = (TextView) findViewById(R.id.tvWarmerStatus);
-        btnToggleWarmer = (Button) findViewById(R.id.btnToggleWarmer);
-
-        layoutToolCoffeeContainer = findViewById(R.id.layoutToolCoffeeContainer);
-        tvCoffeeTemp = (TextView) findViewById(R.id.tvCoffeeTemp);
-        tvCoffeeBadge = (TextView) findViewById(R.id.tvCoffeeBadge);
-        btnStartCoffeeMeasure = (Button) findViewById(R.id.btnStartCoffeeMeasure);
-        btnSpeakCoffeeResult = (ImageButton) findViewById(R.id.btnSpeakCoffeeResult);
 
         // Fever Advisor & Med Timer
         tvAdvisorStatus = (TextView) findViewById(R.id.tvAdvisorStatus);
@@ -586,57 +521,6 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             public void onClick(View v) { startRoomMeasurement(); }
         });
 
-        // --- Lab Switchers ---
-        btnToolLie.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) { switchLabTool(0); }
-        });
-
-        btnToolWarmer.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) { switchLabTool(1); }
-        });
-
-        btnToolCoffee.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) { switchLabTool(2); }
-        });
-
-        btnStartLieTest.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) { startLieTest(); }
-        });
-
-        btnSpeakLieResult.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if (voiceAssistant != null) {
-                    voiceAssistant.speakLieDetector(lastLieVerdictType, lastLieScore);
-                    vibrateTick();
-                }
-            }
-        });
-
-        btnToggleWarmer.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) { toggleHandWarmer(); }
-        });
-
-        btnStartCoffeeMeasure.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) { startCoffeeMeasure(); }
-        });
-
-        btnSpeakCoffeeResult.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if (voiceAssistant != null) {
-                    voiceAssistant.speakBeverage(lastMeasuredCoffee, isFahrenheit);
-                    vibrateTick();
-                }
-            }
-        });
-
         // Pill / Medication Timers
         btnTimer4h.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -665,13 +549,8 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         btnExportReport.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                String path = TempLogManager.exportDoctorReport(MainActivity.this);
                 vibrateDouble();
-                if (path != null) {
-                    Toast.makeText(MainActivity.this, "✓ Отчет сохранен:\n" + path, Toast.LENGTH_LONG).show();
-                } else {
-                    Toast.makeText(MainActivity.this, "Ошибка сохранения отчета", Toast.LENGTH_SHORT).show();
-                }
+                showClinicalReportDialog();
             }
         });
 
@@ -696,241 +575,31 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         });
     }
 
-    private void switchLabTool(int tool) {
-        currentLabTool = tool;
-        vibrateTick();
-
-        btnToolLie.setBackgroundResource(R.drawable.btn_secondary_bg);
-        btnToolLie.setTextColor(Color.parseColor("#9E9E9E"));
-        btnToolWarmer.setBackgroundResource(R.drawable.btn_secondary_bg);
-        btnToolWarmer.setTextColor(Color.parseColor("#9E9E9E"));
-        btnToolCoffee.setBackgroundResource(R.drawable.btn_secondary_bg);
-        btnToolCoffee.setTextColor(Color.parseColor("#9E9E9E"));
-
-        layoutToolLieContainer.setVisibility(View.GONE);
-        layoutToolWarmerContainer.setVisibility(View.GONE);
-        layoutToolCoffeeContainer.setVisibility(View.GONE);
-
-        if (tool == 0) {
-            btnToolLie.setBackgroundResource(R.drawable.tab_selected_bg);
-            btnToolLie.setTextColor(Color.WHITE);
-            layoutToolLieContainer.setVisibility(View.VISIBLE);
-        } else if (tool == 1) {
-            btnToolWarmer.setBackgroundResource(R.drawable.tab_selected_bg);
-            btnToolWarmer.setTextColor(Color.WHITE);
-            layoutToolWarmerContainer.setVisibility(View.VISIBLE);
-        } else {
-            btnToolCoffee.setBackgroundResource(R.drawable.tab_selected_bg);
-            btnToolCoffee.setTextColor(Color.WHITE);
-            layoutToolCoffeeContainer.setVisibility(View.VISIBLE);
-        }
-    }
-
-    // --- Lie Detector Routine ---
-    private void startLieTest() {
-        setWakeLockActive(true);
-        isLieTesting = true;
-        lieSecondsLeft = 15;
-        lieSamples.clear();
-
-        btnStartLieTest.setVisibility(View.GONE);
-        layoutLieResult.setVisibility(View.GONE);
-        tvLieCountdown.setVisibility(View.VISIBLE);
-        tvLieCountdown.setText("15 сек... Сканирование капилляров");
-
-        vibrateShort();
-
-        uiHandler.removeCallbacks(lieCountdownRunnable);
-        uiHandler.postDelayed(lieCountdownRunnable, 1000);
-    }
-
-    private void tickLieTest() {
-        if (!isLieTesting) return;
-
-        lieSecondsLeft--;
-        vibrateHeartbeat(); // Realistic heartbeat thud haptic
-
-        float s = hardwareSkinTemp > 0 ? hardwareSkinTemp : (directSkinTemp > 0 ? directSkinTemp : (lastBatteryTemp > 0 ? lastBatteryTemp : 35.8f));
-        lieSamples.add(s);
-
-        tvLieCountdown.setText(lieSecondsLeft + " сек... Сканирование вазомоторики");
-
-        if (lieSecondsLeft > 0) {
-            uiHandler.postDelayed(lieCountdownRunnable, 1000);
-        } else {
-            finishLieTest();
-        }
-    }
-
-    private void finishLieTest() {
-        setWakeLockActive(false);
-        isLieTesting = false;
-        vibrateDouble();
-
-        tvLieCountdown.setVisibility(View.GONE);
-        layoutLieResult.setVisibility(View.VISIBLE);
-        btnStartLieTest.setVisibility(View.VISIBLE);
-        btnStartLieTest.setText("⏱️ ПОВТОРИТЬ ПРОВЕРКУ");
-
-        float delta = 0f;
-        if (lieSamples.size() >= 2) {
-            delta = lieSamples.get(lieSamples.size() - 1) - lieSamples.get(0);
-        }
-
-        if (delta >= -0.08f) {
-            lastLieVerdictType = 0;
-            lastLieScore = 98;
-            tvLieVerdict.setText("🧘 Абсолютный дзен (Правда 98%)");
-            tvLieVerdict.setTextColor(Color.parseColor("#00E676"));
-        } else if (delta >= -0.25f) {
-            lastLieVerdictType = 1;
-            lastLieScore = 74;
-            tvLieVerdict.setText("⚡ Лёгкое волнение (Правда 74%)");
-            tvLieVerdict.setTextColor(Color.parseColor("#FFD600"));
-        } else {
-            lastLieVerdictType = 2;
-            lastLieScore = 89;
-            tvLieVerdict.setText("🚨 Спазм сосудов! Детектор звенит!");
-            tvLieVerdict.setTextColor(Color.parseColor("#FF1744"));
-        }
-
-        if (voiceAssistant != null) {
-            voiceAssistant.speakLieDetector(lastLieVerdictType, lastLieScore);
-        }
-    }
-
-    // --- Hand Warmer Routine ---
-    private void toggleHandWarmer() {
-        if (handWarmer.isRunning()) {
-            setWakeLockActive(false);
-            handWarmer.stop();
-            tvWarmerStatus.setText("Грелка выключена • Лимит 40°C");
-            btnToggleWarmer.setText("🔥 ВКЛЮЧИТЬ ГРЕЛКУ (60 сек)");
-            btnToggleWarmer.setBackgroundResource(R.drawable.btn_measure_bg);
-            vibrateShort();
-        } else {
-            setWakeLockActive(true);
-            handWarmer.start(new HandWarmerController.WarmerCallback() {
-                @Override
-                public void onTick(final int secondsLeft, final float currentTemp) {
-                    uiHandler.post(new Runnable() {
-                        @Override
-                        public void run() {
-                            tvWarmerStatus.setText(String.format(Locale.US, "🔥 Нагрев: %.1f °C • Осталось: %d сек", currentTemp, secondsLeft));
-                        }
-                    });
-                }
-
-                @Override
-                public void onSafetyAutoStop(final String reason) {
-                    setWakeLockActive(false);
-                    uiHandler.post(new Runnable() {
-                        @Override
-                        public void run() {
-                            tvWarmerStatus.setText("⚠️ " + reason);
-                            btnToggleWarmer.setText("🔥 ВКЛЮЧИТЬ ГРЕЛКУ (60 сек)");
-                            btnToggleWarmer.setBackgroundResource(R.drawable.btn_measure_bg);
-                            vibrateDouble();
-                        }
-                    });
-                }
-
-                @Override
-                public void onCompleted() {
-                    setWakeLockActive(false);
-                    uiHandler.post(new Runnable() {
-                        @Override
-                        public void run() {
-                            tvWarmerStatus.setText("✓ 60-сек сеанс прогрева завершен");
-                            btnToggleWarmer.setText("🔥 ВКЛЮЧИТЬ ГРЕЛКУ (60 сек)");
-                            btnToggleWarmer.setBackgroundResource(R.drawable.btn_measure_bg);
-                            vibrateDouble();
-                        }
-                    });
-                }
-            });
-
-            tvWarmerStatus.setText("🔥 Прогрев активен (Лимит 40°C)...");
-            btnToggleWarmer.setText("🛑 ОСТАНОВИТЬ ГРЕЛКУ");
-            btnToggleWarmer.setBackgroundResource(R.drawable.alert_banner_bg);
-            vibrateShort();
-        }
-    }
-
-    // --- Coffee Sip Measure Routine ---
-    private void startCoffeeMeasure() {
-        setWakeLockActive(true);
-        isCoffeeMeasuring = true;
-        coffeeSecondsLeft = 5;
-        coffeeSamples.clear();
-
-        btnStartCoffeeMeasure.setText("Замер: 5 сек...");
-        btnSpeakCoffeeResult.setVisibility(View.GONE);
-        vibrateShort();
-
-        uiHandler.removeCallbacks(coffeeCountdownRunnable);
-        uiHandler.postDelayed(coffeeCountdownRunnable, 1000);
-    }
-
-    private void tickCoffeeMeasure() {
-        if (!isCoffeeMeasuring) return;
-
-        coffeeSecondsLeft--;
-        vibrateTick();
-
-        float sample = hardwareSkinTemp > 0 ? hardwareSkinTemp : (directSkinTemp > 0 ? directSkinTemp : (lastBatteryTemp > 0 ? lastBatteryTemp : 38.0f));
-        coffeeSamples.add(sample);
-
-        btnStartCoffeeMeasure.setText("Замер: " + coffeeSecondsLeft + " сек...");
-
-        if (coffeeSecondsLeft > 0) {
-            uiHandler.postDelayed(coffeeCountdownRunnable, 1000);
-        } else {
-            finishCoffeeMeasure();
-        }
-    }
-
-    private void finishCoffeeMeasure() {
-        setWakeLockActive(false);
-        isCoffeeMeasuring = false;
-        vibrateDouble();
-
-        btnStartCoffeeMeasure.setText("⏱️ ПОВТОРИТЬ ЗАМЕР НАПИТКА");
-        btnSpeakCoffeeResult.setVisibility(View.VISIBLE);
-
-        float coffeeVal = 58.0f;
-        if (!coffeeSamples.isEmpty()) {
-            float sum = 0;
-            for (float s : coffeeSamples) sum += s;
-            coffeeVal = sum / coffeeSamples.size();
-        }
-
-        lastMeasuredCoffee = coffeeVal;
-        tvCoffeeTemp.setText(formatTemp(coffeeVal));
-
-        if (coffeeVal > 65.0f) {
-            tvCoffeeBadge.setText("🌋 Опасность ожога языка! (Ждите)");
-            tvCoffeeBadge.setTextColor(Color.parseColor("#FF1744"));
-        } else if (coffeeVal >= 55.0f) {
-            tvCoffeeBadge.setText("☕ Идеальная температура! Можно пить");
-            tvCoffeeBadge.setTextColor(Color.parseColor("#00E676"));
-        } else if (coffeeVal >= 45.0f) {
-            tvCoffeeBadge.setText("🍵 Тёплый комфортный напиток");
-            tvCoffeeBadge.setTextColor(Color.parseColor("#00E5FF"));
-        } else {
-            tvCoffeeBadge.setText("🧊 Напиток остыл (Пора подогреть)");
-            tvCoffeeBadge.setTextColor(Color.parseColor("#78909C"));
-        }
-
-        if (voiceAssistant != null) {
-            voiceAssistant.speakBeverage(coffeeVal, isFahrenheit);
-        }
-    }
-
     private void setMedTimer(int hours) {
         long target = System.currentTimeMillis() + (long) hours * 3600 * 1000L;
         getSharedPreferences(ThermometerComplicationService.PREFS_NAME, Context.MODE_PRIVATE)
                 .edit().putLong(PREF_MED_TIMER_TARGET, target).apply();
+
+        try {
+            AlarmManager am = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+            if (am != null) {
+                Intent intent = new Intent(this, MedicationAlarmReceiver.class);
+                intent.setAction(MedicationAlarmReceiver.ACTION_MED_ALARM);
+                int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+                if (Build.VERSION.SDK_INT >= 31) {
+                    flags |= PendingIntent.FLAG_IMMUTABLE;
+                }
+                PendingIntent pi = PendingIntent.getBroadcast(this, 1001, intent, flags);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, target, pi);
+                } else {
+                    am.setExact(AlarmManager.RTC_WAKEUP, target, pi);
+                }
+            }
+        } catch (Throwable t) {
+            t.printStackTrace();
+        }
+
         vibrateTick();
         updateMedTimerView();
         Toast.makeText(this, "💊 Таймер на " + hours + "ч установлен", Toast.LENGTH_SHORT).show();
@@ -939,6 +608,25 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     private void resetMedTimer() {
         getSharedPreferences(ThermometerComplicationService.PREFS_NAME, Context.MODE_PRIVATE)
                 .edit().remove(PREF_MED_TIMER_TARGET).apply();
+
+        try {
+            AlarmManager am = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+            if (am != null) {
+                Intent intent = new Intent(this, MedicationAlarmReceiver.class);
+                intent.setAction(MedicationAlarmReceiver.ACTION_MED_ALARM);
+                int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+                if (Build.VERSION.SDK_INT >= 31) {
+                    flags |= PendingIntent.FLAG_IMMUTABLE;
+                }
+                PendingIntent pi = PendingIntent.getBroadcast(this, 1001, intent, flags);
+                am.cancel(pi);
+            }
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) {
+                nm.cancel(MedicationAlarmReceiver.NOTIFICATION_ID);
+            }
+        } catch (Throwable ignored) {}
+
         vibrateTick();
         updateMedTimerView();
     }
@@ -1098,7 +786,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             }
         }
 
-        tvSensorList.setText("Аппаратный датчик: sdm-skin-therm • Wear OS");
+        tvSensorList.setText("Аппаратный датчик: sdm-skin-therm • v3.6.0");
     }
 
     private void pollThermalSources() {
@@ -1878,6 +1566,24 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     }
 
     // --- History View Rendering ---
+    private void showClinicalReportDialog() {
+        ioExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                TempLogManager.exportDoctorReport(MainActivity.this);
+            }
+        });
+
+        TempLogManager.ClinicalReport report = TempLogManager.buildClinicalReport(this, isFahrenheit);
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("📊 Сводка за 24 часа");
+        builder.setMessage(report.formattedReport);
+        builder.setPositiveButton("Понятно", null);
+        AlertDialog dialog = builder.create();
+        dialog.show();
+    }
+
     private void updateHistoryView() {
         if (layoutHistoryList == null) return;
 
@@ -1913,10 +1619,11 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
             TextView tvRight = new TextView(this);
             String deltaStr = "";
+            float dVal = isFahrenheit ? (e.deltaPrev * 1.8f) : e.deltaPrev;
             if (e.deltaPrev > 0.05f) {
-                deltaStr = String.format(Locale.US, " (+%.1f°↑)", e.deltaPrev);
+                deltaStr = String.format(Locale.US, " (+%.1f°↑)", dVal);
             } else if (e.deltaPrev < -0.05f) {
-                deltaStr = String.format(Locale.US, " (%.1f°↓)", e.deltaPrev);
+                deltaStr = String.format(Locale.US, " (%.1f°↓)", dVal);
             } else {
                 deltaStr = " (=)";
             }
@@ -2058,24 +1765,6 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             tvRoomCountdown.setVisibility(View.GONE);
             btnStartRoomMeasure.setVisibility(View.VISIBLE);
         }
-        if (isLieTesting) {
-            isLieTesting = false;
-            uiHandler.removeCallbacks(lieCountdownRunnable);
-            tvLieCountdown.setVisibility(View.GONE);
-            btnStartLieTest.setVisibility(View.VISIBLE);
-        }
-        if (isCoffeeMeasuring) {
-            isCoffeeMeasuring = false;
-            uiHandler.removeCallbacks(coffeeCountdownRunnable);
-            btnStartCoffeeMeasure.setText("⏱️ ПРОВЕРИТЬ НАПИТОК (5 сек)");
-        }
-        if (handWarmer.isRunning()) {
-            handWarmer.stop();
-            tvWarmerStatus.setText("Грелка выключена • Лимит 40°C");
-            btnToggleWarmer.setText("🔥 ВКЛЮЧИТЬ ГРЕЛКУ (60 сек)");
-            btnToggleWarmer.setBackgroundResource(R.drawable.btn_measure_bg);
-        }
-
         if (tempAnimator != null && tempAnimator.isRunning()) {
             tempAnimator.cancel();
         }
@@ -2101,9 +1790,6 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
         if (tempAnimator != null) {
             tempAnimator.cancel();
-        }
-        if (handWarmer.isRunning()) {
-            handWarmer.stop();
         }
         if (voiceAssistant != null) {
             voiceAssistant.destroy();

@@ -75,6 +75,7 @@ public class ThermometerComplicationService extends Service {
         SharedPreferences sp = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         float skinTemp = sp.getFloat(KEY_SKIN_TEMP, -1.0f);
         float bodyEst = sp.getFloat(KEY_BODY_EST, -1.0f);
+        float tempOffset = sp.getFloat("temp_offset", 0.0f);
         boolean isFahrenheit = sp.getBoolean("is_fahrenheit", false);
         long lastTime = sp.getLong(KEY_TIMESTAMP, 0);
 
@@ -91,10 +92,10 @@ public class ThermometerComplicationService extends Service {
                             if (skinTemp < 30.5f) skinTemp = 30.5f;
                             if (skinTemp > 35.8f) skinTemp = 35.8f;
                             float base = CircadianModel.getBaseline(System.currentTimeMillis());
-                            bodyEst = base + (skinTemp - 33.0f) * 0.42f;
+                            bodyEst = base + (skinTemp - 33.0f) * 0.42f + tempOffset;
                         } else {
                             skinTemp = batteryC;
-                            bodyEst = CircadianModel.getBaseline(System.currentTimeMillis());
+                            bodyEst = CircadianModel.getBaseline(System.currentTimeMillis()) + tempOffset;
                         }
                     }
                 }
@@ -103,8 +104,11 @@ public class ThermometerComplicationService extends Service {
 
         if (skinTemp <= 0) {
             skinTemp = 33.4f;
-            bodyEst = 36.6f;
+            bodyEst = 36.6f + tempOffset;
         }
+
+        if (bodyEst < 34.0f) bodyEst = 34.0f;
+        if (bodyEst > 42.0f) bodyEst = 42.0f;
 
         float dispSkin = isFahrenheit ? (skinTemp * 1.8f + 32f) : skinTemp;
         float dispBody = isFahrenheit ? (bodyEst * 1.8f + 32f) : bodyEst;
@@ -179,7 +183,6 @@ public class ThermometerComplicationService extends Service {
             Intent intent = new Intent("android.support.wearable.complications.ACTION_REQUEST_UPDATE_ALL");
             intent.putExtra("android.support.wearable.complications.EXTRA_PROVIDER_COMPONENT",
                     new ComponentName(context, ThermometerComplicationService.class));
-            // Do NOT restrict to com.google.android.wearable.app so Xiaomi HyperOS receives it too
             context.sendBroadcast(intent);
         } catch (Exception ignored) {}
     }

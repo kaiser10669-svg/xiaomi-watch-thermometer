@@ -1,20 +1,42 @@
 package com.kaiserdev.watchthermometer;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.media.AudioAttributes;
 import android.os.Build;
 import android.speech.tts.TextToSpeech;
+import android.widget.Toast;
 
 import java.util.Locale;
 
 public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
 
+    private static final String PREF_VOICE_MUTED = "voice_muted";
+    private final Context appContext;
     private TextToSpeech tts;
     private boolean isReady = false;
     private boolean isMuted = false;
 
     public VoiceAssistantManager(Context context) {
-        tts = new TextToSpeech(context.getApplicationContext(), this);
+        this.appContext = context.getApplicationContext();
+        SharedPreferences sp = appContext.getSharedPreferences(ThermometerComplicationService.PREFS_NAME, Context.MODE_PRIVATE);
+        this.isMuted = sp.getBoolean(PREF_VOICE_MUTED, false);
+
+        initTtsEngine();
+    }
+
+    private void initTtsEngine() {
+        try {
+            // Explicitly target Google TTS engine on Wear OS / HyperOS
+            tts = new TextToSpeech(appContext, this, "com.google.android.tts");
+        } catch (Throwable t) {
+            try {
+                // Fallback to default engine if specific engine binding fails
+                tts = new TextToSpeech(appContext, this);
+            } catch (Throwable ignored) {
+                isReady = false;
+            }
+        }
     }
 
     @Override
@@ -25,7 +47,7 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
             if (res == TextToSpeech.LANG_MISSING_DATA || res == TextToSpeech.LANG_NOT_SUPPORTED) {
                 tts.setLanguage(Locale.getDefault());
             }
-            tts.setSpeechRate(0.92f); // Мягкий и разборчивый темп для динамика часов
+            tts.setSpeechRate(0.92f); // Clear, articulate cadence for watch speaker
             tts.setPitch(1.05f);
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -36,6 +58,8 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
                 tts.setAudioAttributes(attrs);
             }
             isReady = true;
+        } else {
+            isReady = false;
         }
     }
 
@@ -109,43 +133,6 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
         speak(phrase);
     }
 
-    public void speakBeverage(float tempC, boolean isFahrenheit) {
-        if (!isReady || isMuted || tts == null) return;
-
-        int whole = (int) tempC;
-        int decimal = Math.round((tempC - whole) * 10f);
-        if (decimal == 10) { whole++; decimal = 0; }
-
-        String advice;
-        if (tempC > 65.0f) {
-            advice = "Осторожно! Напиток обжигающе горячий! Опасность ожога языка!";
-        } else if (tempC >= 55.0f) {
-            advice = "Идеальная температура для кофе или чая. Можно пить!";
-        } else if (tempC >= 45.0f) {
-            advice = "Тёплый комфортный напиток.";
-        } else {
-            advice = "Напиток остыл. Можно подогреть.";
-        }
-
-        String phrase = String.format(Locale.US, "Температура напитка %d градусов. %s", whole, advice);
-        speak(phrase);
-    }
-
-    public void speakLieDetector(int verdictType, int scorePercent) {
-        if (!isReady || isMuted || tts == null) return;
-
-        String phrase;
-        if (verdictType == 0) {
-            phrase = String.format(Locale.US, "Тест завершен! Абсолютный дзен! Вероятность правды %d процентов.", scorePercent);
-        } else if (verdictType == 1) {
-            phrase = String.format(Locale.US, "Зафиксировано легкое волнение. Уровень правды %d процентов.", scorePercent);
-        } else {
-            phrase = String.format(Locale.US, "Внимание! Детектор лжи звенит! Резкий спазм сосудов, вероятность стресса %d процентов!", scorePercent);
-        }
-
-        speak(phrase);
-    }
-
     private void speak(String text) {
         if (tts == null) return;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -157,6 +144,8 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
 
     public void setMuted(boolean muted) {
         this.isMuted = muted;
+        appContext.getSharedPreferences(ThermometerComplicationService.PREFS_NAME, Context.MODE_PRIVATE)
+                .edit().putBoolean(PREF_VOICE_MUTED, muted).apply();
     }
 
     public boolean isMuted() {
@@ -164,13 +153,19 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
     }
 
     public void toggleMute() {
-        this.isMuted = !this.isMuted;
+        setMuted(!this.isMuted);
+    }
+
+    public boolean isReady() {
+        return isReady;
     }
 
     public void destroy() {
         if (tts != null) {
-            tts.stop();
-            tts.shutdown();
+            try {
+                tts.stop();
+                tts.shutdown();
+            } catch (Throwable ignored) {}
             tts = null;
         }
         isReady = false;

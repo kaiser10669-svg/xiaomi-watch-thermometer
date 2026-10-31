@@ -52,6 +52,11 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     private TextView tvResultBadge;
     private View btnRepeatMeasure;
 
+    private SparklineView sparklineView;
+    private TextView tvStatMin;
+    private TextView tvStatAvg;
+    private TextView tvStatMax;
+
     private Vibrator vibrator;
     private boolean isMeasuring = false;
     private int measureSecondsLeft = 30;
@@ -123,6 +128,11 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         tvFixedResult = (TextView) findViewById(R.id.tvFixedResult);
         tvResultBadge = (TextView) findViewById(R.id.tvResultBadge);
         btnRepeatMeasure = findViewById(R.id.btnRepeatMeasure);
+
+        sparklineView = (SparklineView) findViewById(R.id.sparklineView);
+        tvStatMin = (TextView) findViewById(R.id.tvStatMin);
+        tvStatAvg = (TextView) findViewById(R.id.tvStatAvg);
+        tvStatMax = (TextView) findViewById(R.id.tvStatMax);
 
         vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
 
@@ -312,6 +322,15 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         } else {
             tvSkinTemp.setText("Измерение...");
             tvSkinStatus.setText("Опрос термодатчиков часов");
+        }
+
+        if (currentCalculatedSkin > 20.0f && sparklineView != null) {
+            sparklineView.addPoint(currentCalculatedSkin);
+            if (sparklineView.getCount() > 0) {
+                tvStatMin.setText(String.format(Locale.US, "%.1f°", sparklineView.getMin()));
+                tvStatAvg.setText(String.format(Locale.US, "%.1f°", sparklineView.getAvg()));
+                tvStatMax.setText(String.format(Locale.US, "%.1f°", sparklineView.getMax()));
+            }
         }
     }
 

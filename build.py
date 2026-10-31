@@ -67,7 +67,7 @@ APP_DIR = os.path.join(BASE_DIR, "app")
 OUT_DIR = os.path.join(BASE_DIR, "build_out")
 
 def run(cmd, cwd=None):
-    res = subprocess.run(cmd, cwd=cwd, shell=isinstance(cmd, str), capture_output=True, text=True)
+    res = subprocess.run(cmd, cwd=cwd, shell=isinstance(cmd, str), capture_output=True, text=True, errors="replace")
     if res.returncode != 0:
         print("STDOUT:", res.stdout)
         print("STDERR:", res.stderr)

@@ -180,10 +180,11 @@
                 android:layout_marginBottom="8dp">
 
                 <TextView
+                    android:id="@+id/tvHeaderWrist"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="ТЕМПЕРАТУРА КОЖИ"
-                    android:textColor="@color/orange_temp"
+                    android:text="👤 ТЕМПЕРАТУРА ТЕЛА"
+                    android:textColor="@color/green_temp"
                     android:textSize="11sp"
                     android:textStyle="bold"
                     android:letterSpacing="0.05"
@@ -203,9 +204,19 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Датчик запястья"
-                    android:textColor="@color/text_title"
+                    android:textColor="@color/green_temp"
                     android:textSize="10sp"
+                    android:textStyle="bold"
                     android:layout_marginTop="2dp"
+                    android:layout_marginBottom="2dp" />
+
+                <TextView
+                    android:id="@+id/tvSensorDetail"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Кожа: --.-° • Среда: --.-°"
+                    android:textColor="@color/text_title"
+                    android:textSize="9sp"
                     android:layout_marginBottom="6dp" />
 
                 <!-- Classic Mercury Thermometer Gauge (Horizontal Glass Tube) -->
@@ -560,9 +571,10 @@
                 android:layout_marginBottom="8dp">
 
                 <TextView
+                    android:id="@+id/tvHeaderTemple"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="🎯 ЗАМЕР НА ВИСКЕ / ЛБУ"
+                    android:text="🎯 ТЕМПЕРАТУРА ТЕЛА (ВИСОК)"
                     android:textColor="@color/orange_temp"
                     android:textSize="11sp"
                     android:textStyle="bold"

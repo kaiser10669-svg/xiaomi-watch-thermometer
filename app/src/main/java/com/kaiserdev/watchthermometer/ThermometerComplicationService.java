@@ -122,22 +122,22 @@ public class ThermometerComplicationService extends Service {
         ComplicationData.Builder builder;
         if (type == ComplicationData.TYPE_SHORT_TEXT) {
             builder = new ComplicationData.Builder(ComplicationData.TYPE_SHORT_TEXT)
-                    .setShortText(ComplicationText.plainText(tempStr))
-                    .setShortTitle(ComplicationText.plainText("ТЕМП"))
+                    .setShortText(ComplicationText.plainText(bodyStr))
+                    .setShortTitle(ComplicationText.plainText("ТЕЛО"))
                     .setIcon(icon)
                     .setTapAction(tapAction);
         } else if (type == ComplicationData.TYPE_RANGED_VALUE) {
             builder = new ComplicationData.Builder(ComplicationData.TYPE_RANGED_VALUE)
-                    .setRangedValue(skinTemp)
-                    .setRangedMinValue(30.0f)
-                    .setRangedMaxValue(40.0f)
-                    .setShortText(ComplicationText.plainText(tempStr))
-                    .setShortTitle(ComplicationText.plainText("ТЕМП"))
+                    .setRangedValue(bodyEst)
+                    .setRangedMinValue(34.0f)
+                    .setRangedMaxValue(42.0f)
+                    .setShortText(ComplicationText.plainText(bodyStr))
+                    .setShortTitle(ComplicationText.plainText("ТЕЛО"))
                     .setIcon(icon)
                     .setTapAction(tapAction);
         } else if (type == ComplicationData.TYPE_LONG_TEXT) {
             builder = new ComplicationData.Builder(ComplicationData.TYPE_LONG_TEXT)
-                    .setLongText(ComplicationText.plainText("Кожа: " + tempStr + " • Тело ~" + bodyStr))
+                    .setLongText(ComplicationText.plainText("Тело: " + bodyStr + " • Кожа " + tempStr))
                     .setLongTitle(ComplicationText.plainText("Термометр"))
                     .setIcon(icon)
                     .setTapAction(tapAction);

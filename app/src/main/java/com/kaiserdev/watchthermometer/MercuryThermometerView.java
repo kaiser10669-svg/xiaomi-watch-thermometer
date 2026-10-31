@@ -14,8 +14,6 @@ import android.util.AttributeSet;
 import android.view.View;
 import android.view.animation.DecelerateInterpolator;
 
-import java.util.Locale;
-
 public class MercuryThermometerView extends View {
 
     private float currentTemp = 36.6f;
@@ -34,7 +32,19 @@ public class MercuryThermometerView extends View {
 
     private final RectF tubeRect = new RectF();
     private final RectF mercuryRect = new RectF();
-    private final Path bulbPath = new Path();
+    private final Path arrowPath = new Path();
+
+    private float bulbCenterX;
+    private float bulbCenterY;
+    private float bulbRadius;
+    private float tubeStartX;
+    private float tubeEndX;
+    private float tubeTop;
+    private float tubeBottom;
+    private float tubeHeight;
+
+    private LinearGradient mercuryGrad;
+    private RadialGradient bulbGrad;
 
     private static final float MIN_SCALE_TEMP = 34.0f;
     private static final float MAX_SCALE_TEMP = 42.0f;
@@ -81,8 +91,8 @@ public class MercuryThermometerView extends View {
         tickMinorPaint.setStrokeWidth(dpToPx(0.8f));
 
         textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        textPaint.setColor(Color.parseColor("#88FFFFFF"));
-        textPaint.setTextSize(dpToPx(8f));
+        textPaint.setColor(Color.parseColor("#99FFFFFF"));
+        textPaint.setTextSize(dpToPx(8.5f));
         textPaint.setTextAlign(Paint.Align.CENTER);
 
         goldMarkPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -95,7 +105,46 @@ public class MercuryThermometerView extends View {
         glassReflectionPaint.setStyle(Paint.Style.FILL);
     }
 
+    @Override
+    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        super.onSizeChanged(w, h, oldw, oldh);
+        if (w <= 0 || h <= 0) return;
+
+        float padLeft = dpToPx(16f);
+        float padRight = dpToPx(16f);
+        bulbRadius = dpToPx(9.5f);
+        tubeHeight = dpToPx(8f);
+
+        bulbCenterX = padLeft + bulbRadius;
+        bulbCenterY = h * 0.38f;
+
+        tubeStartX = bulbCenterX + bulbRadius * 0.7f;
+        tubeEndX = w - padRight;
+        tubeTop = bulbCenterY - tubeHeight / 2f;
+        tubeBottom = bulbCenterY + tubeHeight / 2f;
+
+        tubeRect.set(tubeStartX, tubeTop, tubeEndX, tubeBottom);
+
+        mercuryGrad = new LinearGradient(
+                tubeStartX, tubeTop, tubeEndX, tubeBottom,
+                new int[]{Color.parseColor("#D50000"), Color.parseColor("#FF1744"), Color.parseColor("#FF8C00")},
+                null, Shader.TileMode.CLAMP
+        );
+        mercuryPaint.setShader(mercuryGrad);
+
+        bulbGrad = new RadialGradient(
+                bulbCenterX - bulbRadius * 0.3f, bulbCenterY - bulbRadius * 0.3f,
+                bulbRadius * 1.2f,
+                new int[]{Color.parseColor("#FF5252"), Color.parseColor("#D50000"), Color.parseColor("#8A0000")},
+                null, Shader.TileMode.CLAMP
+        );
+        bulbPaint.setShader(bulbGrad);
+    }
+
     public void setTemperature(float tempC, boolean animate) {
+        if (Float.isNaN(tempC) || Float.isInfinite(tempC)) {
+            tempC = 36.6f;
+        }
         float clamped = Math.max(MIN_SCALE_TEMP, Math.min(MAX_SCALE_TEMP, tempC));
         this.currentTemp = clamped;
 
@@ -115,8 +164,11 @@ public class MercuryThermometerView extends View {
         animator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
             @Override
             public void onAnimationUpdate(ValueAnimator a) {
-                animatedTemp = (float) a.getAnimatedValue();
-                invalidate();
+                float val = (float) a.getAnimatedValue();
+                if (!Float.isNaN(val) && !Float.isInfinite(val)) {
+                    animatedTemp = val;
+                    invalidate();
+                }
             }
         });
         animator.start();
@@ -130,36 +182,15 @@ public class MercuryThermometerView extends View {
         int h = getHeight();
         if (w <= 0 || h <= 0) return;
 
-        float padLeft = dpToPx(18f);
-        float padRight = dpToPx(18f);
-        float bulbRadius = dpToPx(9f);
-        float tubeHeight = dpToPx(8f);
-
-        float bulbCenterX = padLeft + bulbRadius;
-        float bulbCenterY = h * 0.42f;
-
-        float tubeStartX = bulbCenterX + bulbRadius * 0.7f;
-        float tubeEndX = w - padRight;
-        float tubeTop = bulbCenterY - tubeHeight / 2f;
-        float tubeBottom = bulbCenterY + tubeHeight / 2f;
-
         // Draw Capillary Glass Tube Background
-        tubeRect.set(tubeStartX, tubeTop, tubeEndX, tubeBottom);
         canvas.drawRoundRect(tubeRect, tubeHeight / 2f, tubeHeight / 2f, tubeBgPaint);
         canvas.drawRoundRect(tubeRect, tubeHeight / 2f, tubeHeight / 2f, tubeBorderPaint);
 
         // Calculate Mercury Fill Level
         float frac = (animatedTemp - MIN_SCALE_TEMP) / (MAX_SCALE_TEMP - MIN_SCALE_TEMP);
+        if (Float.isNaN(frac)) frac = 0.325f;
         frac = Math.max(0f, Math.min(1f, frac));
         float mercuryWidth = (tubeEndX - tubeStartX) * frac;
-
-        // Mercury Shaders
-        LinearGradient mercuryGrad = new LinearGradient(
-                tubeStartX, tubeTop, tubeStartX + mercuryWidth, tubeBottom,
-                new int[]{Color.parseColor("#D50000"), Color.parseColor("#FF1744"), Color.parseColor("#FF8C00")},
-                null, Shader.TileMode.CLAMP
-        );
-        mercuryPaint.setShader(mercuryGrad);
 
         if (mercuryWidth > 0) {
             mercuryRect.set(tubeStartX, tubeTop + dpToPx(1f), tubeStartX + mercuryWidth, tubeBottom - dpToPx(1f));
@@ -167,13 +198,6 @@ public class MercuryThermometerView extends View {
         }
 
         // Draw Bulb (Mercury Reservoir on the left)
-        RadialGradient bulbGrad = new RadialGradient(
-                bulbCenterX - bulbRadius * 0.3f, bulbCenterY - bulbRadius * 0.3f,
-                bulbRadius * 1.2f,
-                new int[]{Color.parseColor("#FF5252"), Color.parseColor("#D50000"), Color.parseColor("#8A0000")},
-                null, Shader.TileMode.CLAMP
-        );
-        bulbPaint.setShader(bulbGrad);
         canvas.drawCircle(bulbCenterX, bulbCenterY, bulbRadius, bulbPaint);
 
         // Bulb glass specular highlight
@@ -189,7 +213,7 @@ public class MercuryThermometerView extends View {
 
             canvas.drawLine(tx, ty1, tx, ty2, tickMajorPaint);
             if (t % 2 == 0) {
-                canvas.drawText(String.valueOf(t), tx, ty2 + dpToPx(8f), textPaint);
+                canvas.drawText(String.valueOf(t), tx, ty2 + dpToPx(9f), textPaint);
             }
         }
 
@@ -209,13 +233,21 @@ public class MercuryThermometerView extends View {
         canvas.drawLine(gx, tubeTop - dpToPx(4f), gx, tubeBottom + dpToPx(3f), goldMarkPaint);
 
         goldMarkPaint.setStyle(Paint.Style.FILL);
-        Path arrow = new Path();
-        arrow.moveTo(gx, tubeTop - dpToPx(1f));
-        arrow.lineTo(gx - dpToPx(3f), tubeTop - dpToPx(6f));
-        arrow.lineTo(gx + dpToPx(3f), tubeTop - dpToPx(6f));
-        arrow.close();
-        canvas.drawPath(arrow, goldMarkPaint);
+        arrowPath.reset();
+        arrowPath.moveTo(gx, tubeTop - dpToPx(1f));
+        arrowPath.lineTo(gx - dpToPx(3f), tubeTop - dpToPx(6f));
+        arrowPath.lineTo(gx + dpToPx(3f), tubeTop - dpToPx(6f));
+        arrowPath.close();
+        canvas.drawPath(arrowPath, goldMarkPaint);
         goldMarkPaint.setStyle(Paint.Style.STROKE);
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        if (animator != null && animator.isRunning()) {
+            animator.cancel();
+        }
     }
 
     private float dpToPx(float dp) {

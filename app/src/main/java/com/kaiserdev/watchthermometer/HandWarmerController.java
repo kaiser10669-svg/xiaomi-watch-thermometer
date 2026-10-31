@@ -14,13 +14,13 @@ public class HandWarmerController {
     private static final int MAX_DURATION_SECONDS = 60;
     private static final float MAX_SAFE_TEMP = 40.0f; // Strict safety threshold for watch battery
 
-    private boolean isRunning = false;
+    private volatile boolean isRunning = false;
     private int secondsLeft = MAX_DURATION_SECONDS;
     private Thread heatingThread;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private WarmerCallback callback;
+    private volatile WarmerCallback callback;
 
-    public void start(final WarmerCallback callback) {
+    public synchronized void start(final WarmerCallback callback) {
         if (isRunning) return;
         this.callback = callback;
         this.isRunning = true;
@@ -31,7 +31,6 @@ public class HandWarmerController {
             @Override
             public void run() {
                 while (isRunning && !Thread.currentThread().isInterrupted()) {
-                    long start = System.currentTimeMillis();
                     // Gentle controlled math operations to safely warm up CPU & ceramic back
                     double sum = 0;
                     for (int i = 0; i < 250000; i++) {
@@ -53,47 +52,48 @@ public class HandWarmerController {
         heatingThread.start();
     }
 
-    public void updateSafetyCheck(float currentBatteryTemp) {
+    public synchronized void updateSafetyCheck(float currentBatteryTemp) {
         if (!isRunning) return;
 
         if (currentBatteryTemp >= MAX_SAFE_TEMP) {
+            final WarmerCallback cb = this.callback;
             stop();
-            if (callback != null) {
+            if (cb != null) {
                 mainHandler.post(new Runnable() {
                     @Override
                     public void run() {
-                        if (callback != null) {
-                            callback.onSafetyAutoStop("Безопасный лимит 40.0°C достигнут!");
-                        }
+                        cb.onSafetyAutoStop("Безопасный лимит 40.0°C достигнут!");
                     }
                 });
             }
         }
     }
 
-    public void tick(float currentBatteryTemp) {
+    public synchronized void tick(float currentBatteryTemp) {
         if (!isRunning) return;
 
         secondsLeft--;
-        if (callback != null) {
-            callback.onTick(secondsLeft, currentBatteryTemp);
+        final WarmerCallback cb = this.callback;
+        if (cb != null) {
+            cb.onTick(secondsLeft, currentBatteryTemp);
         }
 
         if (secondsLeft <= 0) {
             stop();
-            if (callback != null) {
-                callback.onCompleted();
+            if (cb != null) {
+                cb.onCompleted();
             }
         }
     }
 
-    public void stop() {
+    public synchronized void stop() {
         if (!isRunning) return;
         isRunning = false;
         if (heatingThread != null) {
             heatingThread.interrupt();
             heatingThread = null;
         }
+        callback = null;
     }
 
     public boolean isRunning() {

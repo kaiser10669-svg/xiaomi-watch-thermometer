@@ -41,6 +41,8 @@ import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity implements SensorEventListener, Runnable {
 
@@ -175,15 +177,25 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     private BatteryReceiver batteryReceiver;
     private VoiceAssistantManager voiceAssistant;
 
-    private float directSkinTemp = -1.0f;
-    private float hardwareSkinTemp = -1.0f;
-    private float hardwareCpuTemp = -1.0f;
-    private float hardwareBattGaugeTemp = -1.0f;
-    private boolean isOnWrist = true;
-    private float lastAmbientTemp = -1.0f;
-    private float lastBatteryTemp = -1.0f;
-    private float lastThermalZoneTemp = -1.0f;
-    private boolean isCharging = false;
+    private volatile float directSkinTemp = -1.0f;
+    private volatile float hardwareSkinTemp = -1.0f;
+    private volatile float hardwareCpuTemp = -1.0f;
+    private volatile float hardwareBattGaugeTemp = -1.0f;
+    private volatile boolean isOnWrist = true;
+    private volatile float lastAmbientTemp = -1.0f;
+    private volatile float lastBatteryTemp = -1.0f;
+    private volatile float lastThermalZoneTemp = -1.0f;
+    private volatile boolean isCharging = false;
+
+    private int cachedSkinZone = -1;
+    private int cachedCpuZone = -1;
+    private int cachedBattZone = -1;
+    private boolean thermalZonesDiscovered = false;
+    private final ExecutorService ioExecutor = Executors.newSingleThreadExecutor();
+
+    private long lastCrownVibeMs = 0;
+    private long lastComplicationBroadcastMs = 0;
+    private float lastBroadcastBody = -100.0f;
 
     private boolean isFahrenheit = false;
     private float tempOffset = 0.0f;
@@ -228,7 +240,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     // v3.4.0 Apex Clinical Systems
     private final KalmanFilter1D kalmanSkin = new KalmanFilter1D(0.008f, 0.12f);
     private final KalmanFilter1D kalmanBody = new KalmanFilter1D(0.005f, 0.08f);
-    private float lastHeartRateBpm = -1.0f;
+    private volatile float lastHeartRateBpm = -1.0f;
     private float displayedBodyTemp = -1.0f;
     private ValueAnimator tempAnimator;
 
@@ -310,7 +322,6 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setContentView(R.layout.activity_main);
 
         voiceAssistant = new VoiceAssistantManager(this);
@@ -341,6 +352,22 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         updateMedTimerView();
         switchLabTool(0);
         recalculateAndDisplay();
+    }
+
+    private void setWakeLockActive(boolean active) {
+        if (active) {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        } else {
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == 101 && grantResults != null && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            discoverSensors();
+        }
     }
 
     private void initViews() {
@@ -701,6 +728,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
     // --- Lie Detector Routine ---
     private void startLieTest() {
+        setWakeLockActive(true);
         isLieTesting = true;
         lieSecondsLeft = 15;
         lieSamples.clear();
@@ -735,6 +763,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     }
 
     private void finishLieTest() {
+        setWakeLockActive(false);
         isLieTesting = false;
         vibrateDouble();
 
@@ -773,12 +802,14 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     // --- Hand Warmer Routine ---
     private void toggleHandWarmer() {
         if (handWarmer.isRunning()) {
+            setWakeLockActive(false);
             handWarmer.stop();
             tvWarmerStatus.setText("Грелка выключена • Лимит 40°C");
             btnToggleWarmer.setText("🔥 ВКЛЮЧИТЬ ГРЕЛКУ (60 сек)");
             btnToggleWarmer.setBackgroundResource(R.drawable.btn_measure_bg);
             vibrateShort();
         } else {
+            setWakeLockActive(true);
             handWarmer.start(new HandWarmerController.WarmerCallback() {
                 @Override
                 public void onTick(final int secondsLeft, final float currentTemp) {
@@ -792,6 +823,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
                 @Override
                 public void onSafetyAutoStop(final String reason) {
+                    setWakeLockActive(false);
                     uiHandler.post(new Runnable() {
                         @Override
                         public void run() {
@@ -805,6 +837,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
                 @Override
                 public void onCompleted() {
+                    setWakeLockActive(false);
                     uiHandler.post(new Runnable() {
                         @Override
                         public void run() {
@@ -826,6 +859,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
     // --- Coffee Sip Measure Routine ---
     private void startCoffeeMeasure() {
+        setWakeLockActive(true);
         isCoffeeMeasuring = true;
         coffeeSecondsLeft = 5;
         coffeeSamples.clear();
@@ -857,6 +891,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     }
 
     private void finishCoffeeMeasure() {
+        setWakeLockActive(false);
         isCoffeeMeasuring = false;
         vibrateDouble();
 
@@ -1005,7 +1040,11 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             int scrollY = Math.round(delta * 48);
             if (mainScrollView != null) {
                 mainScrollView.smoothScrollBy(0, scrollY);
-                vibrateTick();
+                long now = System.currentTimeMillis();
+                if (now - lastCrownVibeMs > 60) {
+                    lastCrownVibeMs = now;
+                    vibrateTick();
+                }
             }
             return true;
         }
@@ -1063,46 +1102,56 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     }
 
     private void pollThermalSources() {
-        File bridgeFile = new File("/sdcard/Download/skin_temp.txt");
-        if (bridgeFile.exists() && bridgeFile.canRead()) {
-            try (BufferedReader br = new BufferedReader(new FileReader(bridgeFile))) {
-                String line = br.readLine();
-                if (line != null) {
-                    float val = Float.parseFloat(line.trim());
-                    if (val > 10.0f && val < 50.0f) {
-                        directSkinTemp = val;
-                    }
+        ioExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                File bridgeFile = new File("/sdcard/Download/skin_temp.txt");
+                if (bridgeFile.exists() && bridgeFile.canRead()) {
+                    try (BufferedReader br = new BufferedReader(new FileReader(bridgeFile))) {
+                        String line = br.readLine();
+                        if (line != null) {
+                            float val = Float.parseFloat(line.trim());
+                            if (val > 10.0f && val < 50.0f) {
+                                directSkinTemp = val;
+                            }
+                        }
+                    } catch (Exception ignored) {}
                 }
-            } catch (Exception ignored) {}
-        }
 
-        for (int i = 0; i <= 24; i++) {
-            File typeFile = new File("/sys/class/thermal/thermal_zone" + i + "/type");
-            File tempFile = new File("/sys/class/thermal/thermal_zone" + i + "/temp");
+                if (!thermalZonesDiscovered) {
+                    for (int i = 0; i <= 24; i++) {
+                        File typeFile = new File("/sys/class/thermal/thermal_zone" + i + "/type");
+                        try (BufferedReader br = new BufferedReader(new FileReader(typeFile))) {
+                            String line = br.readLine();
+                            if (line != null) {
+                                String type = line.trim().toLowerCase(Locale.US);
+                                if (type.contains("sdm-skin-therm") || type.contains("skin")) {
+                                    cachedSkinZone = i;
+                                } else if (type.contains("cpuss-0") || type.contains("cpuss")) {
+                                    cachedCpuZone = i;
+                                } else if (type.contains("batt_gauge")) {
+                                    cachedBattZone = i;
+                                }
+                            }
+                        } catch (Throwable ignored) {}
+                    }
+                    thermalZonesDiscovered = true;
+                }
 
-            String type = "";
-            try (BufferedReader br = new BufferedReader(new FileReader(typeFile))) {
-                String line = br.readLine();
-                if (line != null) type = line.trim().toLowerCase(Locale.US);
-            } catch (Throwable ignored) {}
-
-            float raw = -1;
-            try (BufferedReader br = new BufferedReader(new FileReader(tempFile))) {
-                String line = br.readLine();
-                if (line != null) raw = Float.parseFloat(line.trim());
-            } catch (Throwable ignored) {}
-
-            if (raw <= 0) continue;
-            float c = raw > 1000 ? raw / 1000.0f : (raw > 100 ? raw / 10.0f : raw);
-
-            if (type.contains("sdm-skin-therm") || type.contains("skin")) {
-                hardwareSkinTemp = c;
-            } else if (type.contains("cpuss-0") || type.contains("cpuss")) {
-                hardwareCpuTemp = c;
-            } else if (type.contains("batt_gauge")) {
-                hardwareBattGaugeTemp = c;
+                if (cachedSkinZone >= 0) {
+                    float t = readThermalZoneTemp(cachedSkinZone);
+                    if (t > 0) hardwareSkinTemp = t;
+                }
+                if (cachedCpuZone >= 0) {
+                    float t = readThermalZoneTemp(cachedCpuZone);
+                    if (t > 0) hardwareCpuTemp = t;
+                }
+                if (cachedBattZone >= 0) {
+                    float t = readThermalZoneTemp(cachedBattZone);
+                    if (t > 0) hardwareBattGaugeTemp = t;
+                }
             }
-        }
+        });
 
         try {
             Intent bi = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
@@ -1117,6 +1166,20 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
                 }
             }
         } catch (Exception ignored) {}
+    }
+
+    private float readThermalZoneTemp(int zoneIndex) {
+        File tempFile = new File("/sys/class/thermal/thermal_zone" + zoneIndex + "/temp");
+        try (BufferedReader br = new BufferedReader(new FileReader(tempFile))) {
+            String line = br.readLine();
+            if (line != null) {
+                float raw = Float.parseFloat(line.trim());
+                if (raw > 0) {
+                    return raw > 1000 ? raw / 1000.0f : (raw > 100 ? raw / 10.0f : raw);
+                }
+            }
+        } catch (Throwable ignored) {}
+        return -1.0f;
     }
 
     private float getCompensatedContactTemp() {
@@ -1138,9 +1201,9 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             raw -= 4.2f; // Charging coil thermal dissipation offset
         }
 
-        if (hardwareCpuTemp > raw && hardwareCpuTemp < 80.0f) {
+        if (directSkinTemp <= 0 && hardwareCpuTemp > raw && hardwareCpuTemp < 80.0f) {
             float cpuExcess = hardwareCpuTemp - raw;
-            raw -= cpuExcess * 0.10f; // 10% thermal coupling to watch base
+            raw -= cpuExcess * 0.08f;
         }
 
         // PPG Heart Rate Vasodilation Compensation:
@@ -1237,7 +1300,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
 
         // --- Temple Mode Live Preview ---
-        float liveTempleSkin = contactTemp + tempOffset;
+        float liveTempleSkin = contactTemp;
         float liveTempleBody = liveTempleSkin + 1.25f + tempOffset;
         if (liveTempleBody < 34.0f) liveTempleBody = 34.0f;
         if (liveTempleBody > 42.0f) liveTempleBody = 42.0f;
@@ -1248,11 +1311,13 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
 
         // --- Wrist Mode Processing ---
-        // Physical off-body detection
-        boolean reallyOnWrist = isOnWrist && (contactTemp >= 28.0f || directSkinTemp > 0);
+        // Physical off-body detection: On wrist if sensor reports on-wrist,
+        // OR PPG pulse detected (>= 40 bpm), OR temperature exceeds room baseline (>= 22.0°C)
+        boolean hasHeartRatePulse = (lastHeartRateBpm >= 40.0f);
+        boolean reallyOnWrist = (isOnWrist || hasHeartRatePulse) && (contactTemp >= 22.0f || directSkinTemp > 0 || hasHeartRatePulse);
         if (!reallyOnWrist) {
-            kalmanSkin.reset(-1.0f);
-            kalmanBody.reset(-1.0f);
+            kalmanSkin.reset(-100.0f);
+            kalmanBody.reset(-100.0f);
             displayedBodyTemp = -1.0f;
             currentCalculatedSkin = contactTemp;
             currentCalculatedBody = 35.0f;
@@ -1271,16 +1336,25 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
 
         // On-wrist Dual-Flux physiological model (Heat Flux Gradient Compensation)
-        float calibratedSkin = contactTemp + tempOffset;
-        float filteredSkin = kalmanSkin.update(calibratedSkin);
+        // Filter raw contact temperature directly without contaminating with user offset first
+        float filteredSkin = kalmanSkin.update(contactTemp);
 
         // Circadian Baseline & Harmonic Computation
         long now = System.currentTimeMillis();
         float circadianBase = CircadianModel.getBaseline(now);
 
-        float ambientDelta = (23.5f - ambientVal) * 0.14f;
+        // Smooth bounded non-linear environmental compensation (tanh saturation, max ±0.45°C)
+        float rawAmbDelta = (float) (Math.tanh((23.5f - ambientVal) / 10.0f) * 0.45f);
+        float ambientDelta = Math.max(-0.5f, Math.min(0.5f, rawAmbDelta));
+
         float skinDelta = filteredSkin - 33.0f;
-        float skinFactor = (filteredSkin > 33.5f) ? 0.60f : 0.42f;
+        // Compensate for nighttime peripheral vasodilation during sleep phase
+        if (CircadianModel.isNightSleepPhase(now) && skinDelta > 0) {
+            skinDelta *= 0.35f;
+        }
+
+        float skinFactor = (filteredSkin > 33.5f) ? 0.50f : 0.40f;
+        // User calibration offset applied strictly once to final body temperature
         float calculatedBody = circadianBase + (skinDelta * skinFactor) + ambientDelta + tempOffset;
 
         // Realistic safety bounds for human physiology (34.0 to 42.0)
@@ -1412,7 +1486,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
         // Physiological Thermogenesis Calorie Burn calculation
         if (tvThermogenesisCalories != null) {
-            int kcalPerHour = Math.round(11.6f * Math.max(1.0f, delta));
+            int kcalPerHour = (int) Math.round(12.0f + 1.2f * Math.max(0.0f, delta));
             tvThermogenesisCalories.setText(String.format(Locale.US, "⚡ Обогрев тела: ~%d ккал/ч на термогенез", kcalPerHour));
         }
     }
@@ -1435,6 +1509,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             return;
         }
 
+        setWakeLockActive(true);
         isMeasuring = true;
         measureSecondsLeft = 30;
         measureSamples.clear();
@@ -1481,6 +1556,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     }
 
     private void finishMeasurement() {
+        setWakeLockActive(false);
         isMeasuring = false;
         vibrateDouble();
 
@@ -1508,9 +1584,13 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         long now = System.currentTimeMillis();
         float circadianBase = CircadianModel.getBaseline(now);
         float ambientVal = lastAmbientTemp > 0 ? lastAmbientTemp : 23.5f;
-        float ambientDelta = (23.5f - ambientVal) * 0.14f;
+        float rawAmbDelta = (float) (Math.tanh((23.5f - ambientVal) / 10.0f) * 0.45f);
+        float ambientDelta = Math.max(-0.5f, Math.min(0.5f, rawAmbDelta));
         float skinDelta = finalSkin - 33.0f;
-        float skinFactor = (finalSkin > 33.5f) ? 0.60f : 0.42f;
+        if (CircadianModel.isNightSleepPhase(now) && skinDelta > 0) {
+            skinDelta *= 0.35f;
+        }
+        float skinFactor = (finalSkin > 33.5f) ? 0.50f : 0.40f;
         float finalBody = circadianBase + (skinDelta * skinFactor) + ambientDelta + tempOffset;
         if (finalBody < 34.0f) finalBody = 34.0f;
         if (finalBody > 42.0f) finalBody = 42.0f;
@@ -1571,10 +1651,11 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         TempLogManager.saveRecord(this, finalBody, finalSkin, 0);
         updateHistoryView();
         updateFeverAdvisor(finalBody);
-        savePrefsAndUpdateComplication(finalSkin, finalBody, ambientVal);
+        forceComplicationUpdate(finalSkin, finalBody, ambientVal);
     }
 
     private void cancelMeasurement() {
+        setWakeLockActive(false);
         isMeasuring = false;
         uiHandler.removeCallbacks(measureCountdownRunnable);
         layoutMeasuring.setVisibility(View.GONE);
@@ -1583,6 +1664,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
     // --- Temple / Forehead Measurement (15 seconds) ---
     private void startTempleMeasurement() {
+        setWakeLockActive(true);
         isTempleMeasuring = true;
         templeSecondsLeft = 15;
         templeSamples.clear();
@@ -1617,6 +1699,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     }
 
     private void finishTempleMeasurement() {
+        setWakeLockActive(false);
         isTempleMeasuring = false;
         vibrateDouble();
 
@@ -1630,9 +1713,21 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             float sum = 0;
             for (float s : templeSamples) sum += s;
             templeSkin = sum / templeSamples.size();
+
+            // Thermal inertia extrapolation for temple contact
+            if (templeSamples.size() >= 5) {
+                float slope = (templeSamples.get(templeSamples.size() - 1) - templeSamples.get(0)) / (float) templeSamples.size();
+                if (slope > 0.02f) {
+                    templeSkin += Math.min(1.0f, slope * 8.0f);
+                }
+            }
         }
 
-        float templeBody = templeSkin + 1.25f + tempOffset;
+        long now = System.currentTimeMillis();
+        float circBase = CircadianModel.getBaseline(now);
+        // Temporal artery core conversion: forehead skin delta anchored to circadian baseline
+        float templeDelta = templeSkin - 34.5f;
+        float templeBody = circBase + (templeDelta * 0.70f) + tempOffset;
         if (templeBody < 34.0f) templeBody = 34.0f;
         if (templeBody > 42.0f) templeBody = 42.0f;
         templeBody = Math.round(templeBody * 10f) / 10f;
@@ -1671,11 +1766,12 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         updateHistoryView();
         updateFeverAdvisor(templeBody);
 
-        savePrefsAndUpdateComplication(templeSkin, templeBody, lastAmbientTemp);
+        forceComplicationUpdate(templeSkin, templeBody, lastAmbientTemp);
     }
 
     // --- Water / Bath Measurement (10 seconds) ---
     private void startWaterMeasurement() {
+        setWakeLockActive(true);
         isWaterMeasuring = true;
         waterSecondsLeft = 10;
         waterSamples.clear();
@@ -1710,6 +1806,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     }
 
     private void finishWaterMeasurement() {
+        setWakeLockActive(false);
         isWaterMeasuring = false;
         vibrateDouble();
 
@@ -1723,6 +1820,14 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             float sum = 0;
             for (float s : waterSamples) sum += s;
             waterVal = sum / waterSamples.size();
+
+            // Water thermal conductivity extrapolation
+            if (waterSamples.size() >= 4) {
+                float slope = waterSamples.get(waterSamples.size() - 1) - waterSamples.get(0);
+                if (Math.abs(slope) > 0.3f) {
+                    waterVal = waterSamples.get(waterSamples.size() - 1) + slope * 0.4f;
+                }
+            }
         }
 
         lastMeasuredWater = waterVal;
@@ -1739,6 +1844,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
     // --- Room Measurement (60 seconds) ---
     private void startRoomMeasurement() {
+        setWakeLockActive(true);
         isRoomMeasuring = true;
         roomSecondsLeft = 60;
         btnStartRoomMeasure.setVisibility(View.GONE);
@@ -1758,6 +1864,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         if (roomSecondsLeft > 0) {
             uiHandler.postDelayed(roomCountdownRunnable, 1000);
         } else {
+            setWakeLockActive(false);
             isRoomMeasuring = false;
             vibrateDouble();
             tvRoomCountdown.setText("✓ Замер зафиксирован");
@@ -1842,8 +1949,19 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
                     .putLong(ThermometerComplicationService.KEY_TIMESTAMP, System.currentTimeMillis())
                     .apply();
 
-            ThermometerComplicationService.requestComplicationUpdate(this);
+            long now = System.currentTimeMillis();
+            // Throttle IPC broadcast: max once per 60 seconds or on >= 0.3°C shift
+            if (now - lastComplicationBroadcastMs > 60000 || Math.abs(bodyEst - lastBroadcastBody) >= 0.3f) {
+                lastComplicationBroadcastMs = now;
+                lastBroadcastBody = bodyEst;
+                ThermometerComplicationService.requestComplicationUpdate(this);
+            }
         } catch (Exception ignored) {}
+    }
+
+    private void forceComplicationUpdate(float skinTemp, float bodyEst, float ambientTemp) {
+        lastComplicationBroadcastMs = 0;
+        savePrefsAndUpdateComplication(skinTemp, bodyEst, ambientTemp);
     }
 
     private void vibrateShort() {
@@ -1899,6 +2017,9 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     @Override
     protected void onResume() {
         super.onResume();
+        if (mainScrollView != null) {
+            mainScrollView.requestFocus();
+        }
         Intent bi = registerReceiver(batteryReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
         updateBatteryTemp(bi);
 
@@ -1917,6 +2038,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     @Override
     protected void onPause() {
         super.onPause();
+        setWakeLockActive(false);
         if (isMeasuring) cancelMeasurement();
         if (isTempleMeasuring) {
             isTempleMeasuring = false;
@@ -1973,6 +2095,10 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        setWakeLockActive(false);
+        if (ioExecutor != null && !ioExecutor.isShutdown()) {
+            ioExecutor.shutdown();
+        }
         if (tempAnimator != null) {
             tempAnimator.cancel();
         }

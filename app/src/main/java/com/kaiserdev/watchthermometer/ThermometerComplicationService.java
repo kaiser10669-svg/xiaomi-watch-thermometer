@@ -90,10 +90,11 @@ public class ThermometerComplicationService extends Service {
                             skinTemp = 32.1f + (batteryC - 28.0f) * 0.42f;
                             if (skinTemp < 30.5f) skinTemp = 30.5f;
                             if (skinTemp > 35.8f) skinTemp = 35.8f;
-                            bodyEst = 36.5f + (skinTemp - 33.3f) * 0.18f;
+                            float base = CircadianModel.getBaseline(System.currentTimeMillis());
+                            bodyEst = base + (skinTemp - 33.0f) * 0.42f;
                         } else {
                             skinTemp = batteryC;
-                            bodyEst = 36.6f;
+                            bodyEst = CircadianModel.getBaseline(System.currentTimeMillis());
                         }
                     }
                 }
@@ -178,7 +179,7 @@ public class ThermometerComplicationService extends Service {
             Intent intent = new Intent("android.support.wearable.complications.ACTION_REQUEST_UPDATE_ALL");
             intent.putExtra("android.support.wearable.complications.EXTRA_PROVIDER_COMPONENT",
                     new ComponentName(context, ThermometerComplicationService.class));
-            intent.setPackage("com.google.android.wearable.app");
+            // Do NOT restrict to com.google.android.wearable.app so Xiaomi HyperOS receives it too
             context.sendBroadcast(intent);
         } catch (Exception ignored) {}
     }

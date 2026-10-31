@@ -12,10 +12,10 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:gravity="center_horizontal"
-        android:paddingTop="34dp"
-        android:paddingBottom="52dp"
-        android:paddingLeft="18dp"
-        android:paddingRight="18dp">
+        android:paddingTop="48dp"
+        android:paddingBottom="56dp"
+        android:paddingLeft="36dp"
+        android:paddingRight="36dp">
 
         <!-- App Header with Voice & Unit Toggles -->
         <LinearLayout
@@ -38,19 +38,19 @@
             <!-- Voice Mute Toggle -->
             <ImageButton
                 android:id="@+id/btnVoiceMute"
-                android:layout_width="28dp"
-                android:layout_height="24dp"
+                android:layout_width="32dp"
+                android:layout_height="28dp"
                 android:background="@drawable/tab_unselected_bg"
                 android:src="@drawable/ic_volume_up"
-                android:padding="3dp"
+                android:padding="4dp"
                 android:layout_marginEnd="6dp"
                 android:contentDescription="Голос" />
 
             <!-- Unit switch: °C / °F -->
             <Button
                 android:id="@+id/btnUnitToggle"
-                android:layout_width="38dp"
-                android:layout_height="24dp"
+                android:layout_width="40dp"
+                android:layout_height="28dp"
                 android:background="@drawable/tab_unselected_bg"
                 android:text="°C"
                 android:textColor="@color/cyan_temp"
@@ -223,7 +223,7 @@
                 <com.kaiserdev.watchthermometer.MercuryThermometerView
                     android:id="@+id/mercuryViewWrist"
                     android:layout_width="match_parent"
-                    android:layout_height="28dp"
+                    android:layout_height="42dp"
                     android:layout_marginBottom="8dp" />
 
                 <!-- Idle mode: Start Measurement Button -->
@@ -604,7 +604,7 @@
                 <com.kaiserdev.watchthermometer.MercuryThermometerView
                     android:id="@+id/mercuryViewTemple"
                     android:layout_width="match_parent"
-                    android:layout_height="28dp"
+                    android:layout_height="42dp"
                     android:layout_marginBottom="8dp" />
 
                 <Button

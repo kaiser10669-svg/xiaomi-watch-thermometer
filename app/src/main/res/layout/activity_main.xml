@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_black"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:paddingTop="44dp"
+        android:paddingBottom="48dp"
+        android:paddingLeft="24dp"
+        android:paddingRight="24dp">
+
+        <!-- App Header -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="ТЕРМОМЕТР"
+            android:textColor="@color/text_title"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.08"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Skin Temperature Card (Hero) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@drawable/bg_card"
+            android:paddingTop="12dp"
+            android:paddingBottom="14dp"
+            android:paddingLeft="12dp"
+            android:paddingRight="12dp"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="ТЕМПЕРАТУРА КОЖИ"
+                android:textColor="@color/orange_temp"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.05"
+                android:layout_marginBottom="4dp" />
+
+            <TextView
+                android:id="@+id/tvSkinTemp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="--.- °C"
+                android:textColor="@color/text_white"
+                android:textSize="32sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvSkinStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Датчик запястья"
+                android:textColor="@color/text_title"
+                android:textSize="10sp"
+                android:layout_marginTop="2dp" />
+        </LinearLayout>
+
+        <!-- Ambient Temperature Card -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@drawable/bg_card"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
+            android:paddingLeft="12dp"
+            android:paddingRight="12dp"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="ВОЗДУХ (БАРОМЕТР)"
+                android:textColor="@color/cyan_temp"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.05"
+                android:layout_marginBottom="2dp" />
+
+            <TextView
+                android:id="@+id/tvAmbientTemp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="--.- °C"
+                android:textColor="@color/text_white"
+                android:textSize="22sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Battery Temperature Card -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@drawable/bg_card"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
+            android:paddingLeft="12dp"
+            android:paddingRight="12dp"
+            android:layout_marginBottom="12dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="БАТАРЕЯ"
+                android:textColor="@color/green_temp"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.05"
+                android:layout_marginBottom="2dp" />
+
+            <TextView
+                android:id="@+id/tvBatteryTemp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="--.- °C"
+                android:textColor="@color/text_white"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Footnote info -->
+        <TextView
+            android:id="@+id/tvSensorList"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Обновление в реальном времени"
+            android:textColor="@color/text_title"
+            android:textSize="10sp"
+            android:gravity="center" />
+
+    </LinearLayout>
+</ScrollView>

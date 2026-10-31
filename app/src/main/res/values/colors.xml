@@ -8,4 +8,9 @@
     <color name="cyan_temp">#00E5FF</color>
     <color name="green_temp">#00E676</color>
     <color name="btn_bg">#2C2C2E</color>
+    <color name="accent_orange">#FF8C00</color>
+    <color name="accent_orange_pressed">#CC7000</color>
+    <color name="badge_normal">#00E676</color>
+    <color name="badge_warning">#FFA000</color>
+    <color name="badge_fever">#FF5252</color>
 </resources>

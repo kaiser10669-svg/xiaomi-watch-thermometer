@@ -65,7 +65,128 @@
                 android:text="Датчик запястья"
                 android:textColor="@color/text_title"
                 android:textSize="10sp"
-                android:layout_marginTop="2dp" />
+                android:layout_marginTop="2dp"
+                android:layout_marginBottom="8dp" />
+
+            <!-- Idle mode: Start Measurement Button -->
+            <Button
+                android:id="@+id/btnStartMeasure"
+                android:layout_width="match_parent"
+                android:layout_height="34dp"
+                android:background="@drawable/btn_measure_bg"
+                android:text="⏱️ НАЧАТЬ ЗАМЕР (30 сек)"
+                android:textColor="#FFFFFF"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:textAllCaps="false" />
+
+            <!-- Active Measuring Mode -->
+            <LinearLayout
+                android:id="@+id/layoutMeasuring"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/tvMeasureCountdown"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="30 сек"
+                    android:textColor="@color/accent_orange"
+                    android:textSize="17sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="4dp" />
+
+                <ProgressBar
+                    android:id="@+id/pbMeasure"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="6dp"
+                    android:progressDrawable="@drawable/progress_measure_drawable"
+                    android:max="30"
+                    android:progress="30"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:id="@+id/tvMeasureTip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Прижмите часы плотно к руке..."
+                    android:textColor="@color/text_title"
+                    android:textSize="9sp"
+                    android:layout_marginBottom="8dp" />
+
+                <Button
+                    android:id="@+id/btnCancelMeasure"
+                    android:layout_width="wrap_content"
+                    android:layout_height="28dp"
+                    android:background="@drawable/btn_secondary_bg"
+                    android:text="Отмена"
+                    android:textColor="@color/text_title"
+                    android:textSize="10sp"
+                    android:paddingLeft="16dp"
+                    android:paddingRight="16dp"
+                    android:textAllCaps="false" />
+            </LinearLayout>
+
+            <!-- Completed Measurement Result -->
+            <LinearLayout
+                android:id="@+id/layoutMeasureResult"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="РЕЗУЛЬТАТ ЗАМЕРА"
+                    android:textColor="@color/green_temp"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.05"
+                    android:layout_marginBottom="2dp" />
+
+                <TextView
+                    android:id="@+id/tvFixedResult"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="36.6 °C"
+                    android:textColor="@color/green_temp"
+                    android:textSize="26sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvResultBadge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/badge_bg"
+                    android:text="✓ В норме"
+                    android:textColor="@color/green_temp"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:paddingTop="3dp"
+                    android:paddingBottom="3dp"
+                    android:paddingLeft="8dp"
+                    android:paddingRight="8dp"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginBottom="8dp" />
+
+                <Button
+                    android:id="@+id/btnRepeatMeasure"
+                    android:layout_width="wrap_content"
+                    android:layout_height="28dp"
+                    android:background="@drawable/btn_secondary_bg"
+                    android:text="Повторить замер"
+                    android:textColor="#FFFFFF"
+                    android:textSize="10sp"
+                    android:paddingLeft="16dp"
+                    android:paddingRight="16dp"
+                    android:textAllCaps="false" />
+            </LinearLayout>
         </LinearLayout>
 
         <!-- Ambient Temperature Card -->

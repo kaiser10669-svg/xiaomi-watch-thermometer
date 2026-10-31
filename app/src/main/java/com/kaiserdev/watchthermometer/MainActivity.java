@@ -16,8 +16,14 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
+import android.view.View;
 import android.view.WindowManager;
+import android.widget.Button;
+import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.graphics.Color;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -34,6 +40,31 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     private TextView tvAmbientTemp;
     private TextView tvBatteryTemp;
     private TextView tvSensorList;
+
+    private View btnStartMeasure;
+    private View layoutMeasuring;
+    private TextView tvMeasureCountdown;
+    private ProgressBar pbMeasure;
+    private TextView tvMeasureTip;
+    private View btnCancelMeasure;
+    private View layoutMeasureResult;
+    private TextView tvFixedResult;
+    private TextView tvResultBadge;
+    private View btnRepeatMeasure;
+
+    private Vibrator vibrator;
+    private boolean isMeasuring = false;
+    private int measureSecondsLeft = 30;
+    private final List<Float> measureSamples = new ArrayList<>();
+    private float currentCalculatedSkin = -1.0f;
+    private float currentCalculatedBody = -1.0f;
+
+    private final Runnable measureCountdownRunnable = new Runnable() {
+        @Override
+        public void run() {
+            tickMeasure();
+        }
+    };
 
     private SensorManager sensorManager;
     private final List<Sensor> registeredSensors = new ArrayList<>();
@@ -81,6 +112,40 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         tvAmbientTemp = (TextView) findViewById(R.id.tvAmbientTemp);
         tvBatteryTemp = (TextView) findViewById(R.id.tvBatteryTemp);
         tvSensorList = (TextView) findViewById(R.id.tvSensorList);
+
+        btnStartMeasure = findViewById(R.id.btnStartMeasure);
+        layoutMeasuring = findViewById(R.id.layoutMeasuring);
+        tvMeasureCountdown = (TextView) findViewById(R.id.tvMeasureCountdown);
+        pbMeasure = (ProgressBar) findViewById(R.id.pbMeasure);
+        tvMeasureTip = (TextView) findViewById(R.id.tvMeasureTip);
+        btnCancelMeasure = findViewById(R.id.btnCancelMeasure);
+        layoutMeasureResult = findViewById(R.id.layoutMeasureResult);
+        tvFixedResult = (TextView) findViewById(R.id.tvFixedResult);
+        tvResultBadge = (TextView) findViewById(R.id.tvResultBadge);
+        btnRepeatMeasure = findViewById(R.id.btnRepeatMeasure);
+
+        vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+
+        btnStartMeasure.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startMeasurement();
+            }
+        });
+
+        btnCancelMeasure.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                cancelMeasurement();
+            }
+        });
+
+        btnRepeatMeasure.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startMeasurement();
+            }
+        });
 
         batteryReceiver = new BatteryReceiver(this);
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
@@ -195,6 +260,8 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             float bodyEst = 36.5f + (directSkinTemp - 33.4f) * 0.25f;
             if (bodyEst < 35.5f) bodyEst = 35.5f;
             if (bodyEst > 39.5f) bodyEst = 39.5f;
+            currentCalculatedSkin = directSkinTemp;
+            currentCalculatedBody = bodyEst;
             tvSkinTemp.setText(String.format(Locale.US, "%.1f °C", directSkinTemp));
             tvSkinStatus.setText(String.format(Locale.US, "Goodix • Тело ~%.1f °C", bodyEst));
             savePrefsAndUpdateComplication(directSkinTemp, bodyEst, lastAmbientTemp);
@@ -225,6 +292,9 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
                 if (bodyEst < 36.1f) bodyEst = 36.1f;
                 if (bodyEst > 37.5f) bodyEst = 37.5f;
 
+                currentCalculatedSkin = wristSkin;
+                currentCalculatedBody = bodyEst;
+
                 tvSkinTemp.setText(String.format(Locale.US, "%.1f °C", wristSkin));
                 if (isCharging) {
                     tvSkinStatus.setText(String.format(Locale.US, "Зарядка (комп.) • Тело ~%.1f °C", bodyEst));
@@ -234,12 +304,135 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
                 savePrefsAndUpdateComplication(wristSkin, bodyEst, lastAmbientTemp);
             } else {
                 // Watch is off wrist / cooling down
+                currentCalculatedSkin = rawContact;
+                currentCalculatedBody = 36.6f;
                 tvSkinTemp.setText(String.format(Locale.US, "%.1f °C", rawContact));
                 tvSkinStatus.setText("Наденьте часы плотно на руку");
             }
         } else {
             tvSkinTemp.setText("Измерение...");
             tvSkinStatus.setText("Опрос термодатчиков часов");
+        }
+    }
+
+    private void startMeasurement() {
+        isMeasuring = true;
+        measureSecondsLeft = 30;
+        measureSamples.clear();
+
+        btnStartMeasure.setVisibility(View.GONE);
+        layoutMeasureResult.setVisibility(View.GONE);
+        layoutMeasuring.setVisibility(View.VISIBLE);
+
+        pbMeasure.setMax(30);
+        pbMeasure.setProgress(30);
+        tvMeasureCountdown.setText("30 сек");
+        tvMeasureTip.setText("Прижмите часы плотно к руке...");
+
+        vibrateShort();
+
+        uiHandler.removeCallbacks(measureCountdownRunnable);
+        uiHandler.postDelayed(measureCountdownRunnable, 1000);
+    }
+
+    private void tickMeasure() {
+        if (!isMeasuring) return;
+
+        measureSecondsLeft--;
+        if (currentCalculatedSkin > 20.0f) {
+            measureSamples.add(currentCalculatedSkin);
+        }
+
+        pbMeasure.setProgress(measureSecondsLeft);
+        tvMeasureCountdown.setText(measureSecondsLeft + " сек");
+
+        if (measureSecondsLeft > 20) {
+            tvMeasureTip.setText("Прогрев датчика от кожи...");
+        } else if (measureSecondsLeft > 10) {
+            tvMeasureTip.setText("Стабилизация замера...");
+        } else {
+            tvMeasureTip.setText("Фиксация результата...");
+        }
+
+        if (measureSecondsLeft > 0) {
+            uiHandler.postDelayed(measureCountdownRunnable, 1000);
+        } else {
+            finishMeasurement();
+        }
+    }
+
+    private void finishMeasurement() {
+        isMeasuring = false;
+        vibrateDouble();
+
+        layoutMeasuring.setVisibility(View.GONE);
+        layoutMeasureResult.setVisibility(View.VISIBLE);
+
+        float finalSkin = currentCalculatedSkin > 20.0f ? currentCalculatedSkin : 33.4f;
+        if (!measureSamples.isEmpty()) {
+            int count = Math.min(measureSamples.size(), 8);
+            float sum = 0;
+            for (int i = measureSamples.size() - count; i < measureSamples.size(); i++) {
+                sum += measureSamples.get(i);
+            }
+            finalSkin = sum / count;
+        }
+
+        float finalBody = 36.5f + (finalSkin - 33.3f) * 0.18f;
+        if (finalBody < 35.0f) finalBody = 35.0f;
+        if (finalBody > 39.5f) finalBody = 39.5f;
+
+        tvFixedResult.setText(String.format(Locale.US, "%.1f °C", finalBody));
+
+        if (finalBody < 35.5f) {
+            tvResultBadge.setText("Пониженная");
+            tvResultBadge.setTextColor(Color.parseColor("#00E5FF"));
+            tvFixedResult.setTextColor(Color.parseColor("#00E5FF"));
+        } else if (finalBody <= 37.2f) {
+            tvResultBadge.setText("✓ Температура в норме");
+            tvResultBadge.setTextColor(Color.parseColor("#00E676"));
+            tvFixedResult.setTextColor(Color.parseColor("#00E676"));
+        } else if (finalBody <= 38.0f) {
+            tvResultBadge.setText("⚠ Субфебрильная");
+            tvResultBadge.setTextColor(Color.parseColor("#FFA000"));
+            tvFixedResult.setTextColor(Color.parseColor("#FFA000"));
+        } else {
+            tvResultBadge.setText("🔥 Повышенная");
+            tvResultBadge.setTextColor(Color.parseColor("#FF5252"));
+            tvFixedResult.setTextColor(Color.parseColor("#FF5252"));
+        }
+
+        savePrefsAndUpdateComplication(finalSkin, finalBody, lastAmbientTemp);
+    }
+
+    private void cancelMeasurement() {
+        isMeasuring = false;
+        uiHandler.removeCallbacks(measureCountdownRunnable);
+        layoutMeasuring.setVisibility(View.GONE);
+        btnStartMeasure.setVisibility(View.VISIBLE);
+    }
+
+    private void vibrateShort() {
+        if (vibrator != null && vibrator.hasVibrator()) {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator.vibrate(VibrationEffect.createOneShot(45, VibrationEffect.DEFAULT_AMPLITUDE));
+                } else {
+                    vibrator.vibrate(45);
+                }
+            } catch (Exception ignored) {}
+        }
+    }
+
+    private void vibrateDouble() {
+        if (vibrator != null && vibrator.hasVibrator()) {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator.vibrate(VibrationEffect.createWaveform(new long[]{0, 80, 80, 120}, -1));
+                } else {
+                    vibrator.vibrate(new long[]{0, 80, 80, 120}, -1);
+                }
+            } catch (Exception ignored) {}
         }
     }
 
@@ -279,6 +472,9 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     @Override
     protected void onPause() {
         super.onPause();
+        if (isMeasuring) {
+            cancelMeasurement();
+        }
         uiHandler.removeCallbacks(this);
         try {
             unregisterReceiver(batteryReceiver);

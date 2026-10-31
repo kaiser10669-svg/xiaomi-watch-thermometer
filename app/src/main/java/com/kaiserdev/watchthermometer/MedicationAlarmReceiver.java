@@ -85,13 +85,22 @@ public class MedicationAlarmReceiver extends BroadcastReceiver {
             }
         } catch (Throwable ignored) {}
 
-        // 1. Wear OS Distinct Medical Alert Vibration (double-pulse + accent pulse)
+        // 1. Wear OS Distinct Medical Alert Vibration (breaks through Do Not Disturb)
         try {
             Vibrator vibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
             if (vibrator != null && vibrator.hasVibrator()) {
                 long[] pattern = new long[]{0, 250, 150, 250, 200, 450};
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
+                if (Build.VERSION.SDK_INT >= 33) {
+                    android.os.VibrationAttributes va = new android.os.VibrationAttributes.Builder()
+                            .setUsage(android.os.VibrationAttributes.USAGE_ALARM)
+                            .build();
+                    vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1), va);
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    android.media.AudioAttributes aa = new android.media.AudioAttributes.Builder()
+                            .setUsage(android.media.AudioAttributes.USAGE_ALARM)
+                            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build();
+                    vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1), aa);
                 } else {
                     vibrator.vibrate(pattern, -1);
                 }
@@ -110,6 +119,7 @@ public class MedicationAlarmReceiver extends BroadcastReceiver {
                     );
                     chan.setDescription("Оповещение о завершении интервала жаропонижающего");
                     chan.enableVibration(true);
+                    chan.setBypassDnd(true);
                     chan.setVibrationPattern(new long[]{0, 250, 150, 250, 200, 450});
                     chan.enableLights(true);
                     chan.setLightColor(Color.CYAN);

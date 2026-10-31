@@ -847,7 +847,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
 
         if (tvSensorList != null) {
-            tvSensorList.setText("Xiaomi Watch 5 • Clinical v4.5.0");
+            tvSensorList.setText("Xiaomi Watch 5 • Clinical v4.6.0");
         }
     }
 
@@ -974,7 +974,11 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         if (layoutOverheat == null || tvOverheatMsg == null) return;
         if (bTemp >= 42.0f) {
             layoutOverheat.setVisibility(View.VISIBLE);
-            tvOverheatMsg.setText(String.format(Locale.US, "⚠️ Батарея %s! Снимите с зарядки", formatTemp(bTemp)));
+            if (isCharging || isPlugged) {
+                tvOverheatMsg.setText(String.format(Locale.US, "⚠️ Перегрев при зарядке (%s)! Снимите с дока", formatTemp(bTemp)));
+            } else {
+                tvOverheatMsg.setText(String.format(Locale.US, "⚠️ Высокая температура часов (%s)! Охладите устройство", formatTemp(bTemp)));
+            }
         } else {
             layoutOverheat.setVisibility(View.GONE);
         }
@@ -1337,7 +1341,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         layoutMeasuring.setVisibility(View.VISIBLE);
 
         pbMeasure.setMax(30);
-        pbMeasure.setProgress(30);
+        pbMeasure.setProgress(0);
         tvMeasureCountdown.setText("30 сек");
         tvMeasureTip.setText("Прижмите часы плотно к руке...");
 
@@ -1361,11 +1365,12 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
 
         measureSecondsLeft--;
+        vibrateTick();
         if (currentCalculatedSkin > 20.0f) {
             measureSamples.add(currentCalculatedSkin);
         }
 
-        pbMeasure.setProgress(measureSecondsLeft);
+        pbMeasure.setProgress(30 - measureSecondsLeft);
         tvMeasureCountdown.setText(measureSecondsLeft + " сек");
 
         if (measureSecondsLeft > 20) {
@@ -1386,7 +1391,6 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     private void finishMeasurement() {
         setWakeLockActive(false);
         isMeasuring = false;
-        vibrateDouble();
 
         layoutMeasuring.setVisibility(View.GONE);
         layoutMeasureResult.setVisibility(View.VISIBLE);
@@ -1437,6 +1441,12 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
         float circadianDev = CircadianModel.getDeviation(finalBody, now);
         String devStr = CircadianModel.formatDeviation(circadianDev, isFahrenheit);
+
+        if (finalBody >= 38.5f) {
+            vibrateHeartbeat();
+        } else {
+            vibrateDouble();
+        }
 
         lastMeasuredBodyWrist = finalBody;
         currentCalculatedBody = finalBody;
@@ -1585,7 +1595,6 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     private void finishTempleMeasurement() {
         setWakeLockActive(false);
         isTempleMeasuring = false;
-        vibrateDouble();
 
         tvTempleCountdown.setVisibility(View.GONE);
         if (btnCancelTempleMeasure != null) btnCancelTempleMeasure.setVisibility(View.GONE);
@@ -1617,6 +1626,12 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         if (templeBody < 34.0f) templeBody = 34.0f;
         if (templeBody > 42.0f) templeBody = 42.0f;
         templeBody = Math.round(templeBody * 10f) / 10f;
+
+        if (templeBody >= 38.5f) {
+            vibrateHeartbeat();
+        } else {
+            vibrateDouble();
+        }
 
         lastMeasuredBodyTemple = templeBody;
         tvTempleFixedResult.setText(formatTemp(templeBody));
@@ -1977,6 +1992,9 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         uiHandler.removeCallbacksAndMessages(null);
         super.onDestroy();
         setWakeLockActive(false);
+        try {
+            unregisterReceiver(batteryReceiver);
+        } catch (Exception ignored) {}
         if (clinicalDialog != null && clinicalDialog.isShowing()) {
             clinicalDialog.dismiss();
             clinicalDialog = null;

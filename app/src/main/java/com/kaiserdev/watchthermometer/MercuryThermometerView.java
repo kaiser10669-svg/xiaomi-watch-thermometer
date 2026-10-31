@@ -276,15 +276,19 @@ public class MercuryThermometerView extends View {
             goldFrac = (98.6f - minF) / (maxF - minF);
         }
 
-        // Classic Golden Arrow and Line
+        // Classic Medical Golden Calibration Notches (outer glass sleeve without obstructing liquid mercury)
         float gx = tubeStartX + scaleLength * goldFrac;
-        canvas.drawLine(gx, tubeTop - dp(4f), gx, tubeBottom + dp(3f), goldMarkPaint);
+        // Upper sleeve notch
+        canvas.drawLine(gx, tubeTop - dp(3.5f), gx, tubeTop, goldMarkPaint);
+        // Lower sleeve notch
+        canvas.drawLine(gx, tubeBottom, gx, tubeBottom + dp(3.5f), goldMarkPaint);
 
+        // Classic Golden Pointer Arrow
         goldMarkPaint.setStyle(Paint.Style.FILL);
         arrowPath.reset();
         arrowPath.moveTo(gx, tubeTop - dp(1f));
-        arrowPath.lineTo(gx - dp(3f), tubeTop - dp(6f));
-        arrowPath.lineTo(gx + dp(3f), tubeTop - dp(6f));
+        arrowPath.lineTo(gx - dp(3f), tubeTop - dp(6.5f));
+        arrowPath.lineTo(gx + dp(3f), tubeTop - dp(6.5f));
         arrowPath.close();
         canvas.drawPath(arrowPath, goldMarkPaint);
         goldMarkPaint.setStyle(Paint.Style.STROKE);

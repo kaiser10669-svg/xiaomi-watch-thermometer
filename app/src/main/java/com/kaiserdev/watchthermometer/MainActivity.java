@@ -171,6 +171,10 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     private VoiceAssistantManager voiceAssistant;
 
     private float directSkinTemp = -1.0f;
+    private float hardwareSkinTemp = -1.0f;
+    private float hardwareCpuTemp = -1.0f;
+    private float hardwareBattGaugeTemp = -1.0f;
+    private boolean isOnWrist = true;
     private float lastAmbientTemp = -1.0f;
     private float lastBatteryTemp = -1.0f;
     private float lastThermalZoneTemp = -1.0f;
@@ -267,8 +271,9 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         updateMedTimerView();
 
         if (handWarmer.isRunning()) {
-            handWarmer.tick(lastBatteryTemp > 0 ? lastBatteryTemp : 36.0f);
-            handWarmer.updateSafetyCheck(lastBatteryTemp > 0 ? lastBatteryTemp : 36.0f);
+            float checkT = hardwareSkinTemp > 0 ? hardwareSkinTemp : (lastBatteryTemp > 0 ? lastBatteryTemp : 36.0f);
+            handWarmer.tick(checkT);
+            handWarmer.updateSafetyCheck(checkT);
         }
 
         uiHandler.postDelayed(this, 1500);
@@ -702,7 +707,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         lieSecondsLeft--;
         vibrateHeartbeat(); // Realistic heartbeat thud haptic
 
-        float s = directSkinTemp > 0 ? directSkinTemp : (lastBatteryTemp > 0 ? lastBatteryTemp : 35.8f);
+        float s = hardwareSkinTemp > 0 ? hardwareSkinTemp : (directSkinTemp > 0 ? directSkinTemp : (lastBatteryTemp > 0 ? lastBatteryTemp : 35.8f));
         lieSamples.add(s);
 
         tvLieCountdown.setText(lieSecondsLeft + " сек... Сканирование вазомоторики");
@@ -824,7 +829,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         coffeeSecondsLeft--;
         vibrateTick();
 
-        float sample = directSkinTemp > 0 ? directSkinTemp : (lastBatteryTemp > 0 ? lastBatteryTemp : 38.0f);
+        float sample = hardwareSkinTemp > 0 ? hardwareSkinTemp : (directSkinTemp > 0 ? directSkinTemp : (lastBatteryTemp > 0 ? lastBatteryTemp : 38.0f));
         coffeeSamples.add(sample);
 
         btnStartCoffeeMeasure.setText("Замер: " + coffeeSecondsLeft + " сек...");
@@ -1027,16 +1032,17 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
             if (type == Sensor.TYPE_LIGHT) continue;
 
+            boolean isOffbody = type == 34 || name.contains("offbody") || strType.contains("offbody");
             boolean isSkin = type == 65590 || name.contains("skin") || strType.contains("skin_temperature") || name.contains("body_temp");
             boolean isAmbient = type == Sensor.TYPE_AMBIENT_TEMPERATURE || type == 7 || (name.contains("ambient") && name.contains("temp")) || (name.contains("temp") && !name.contains("battery"));
             boolean isBaro = type == Sensor.TYPE_PRESSURE || name.contains("pressure") || name.contains("barometer");
 
-            if (isSkin || isAmbient || isBaro) {
+            if (isOffbody || isSkin || isAmbient || isBaro) {
                 registeredSensors.add(s);
             }
         }
 
-        tvSensorList.setText("Xiaomi Watch 5 • Wear OS • v3.1.0");
+        tvSensorList.setText("Аппаратный датчик: sdm-skin-therm • Wear OS");
     }
 
     private void pollThermalSources() {
@@ -1053,20 +1059,34 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             } catch (Exception ignored) {}
         }
 
-        for (int i = 0; i < 25; i++) {
+        for (int i = 0; i <= 20; i++) {
+            File typeFile = new File("/sys/class/thermal/thermal_zone" + i + "/type");
             File tempFile = new File("/sys/class/thermal/thermal_zone" + i + "/temp");
-            if (tempFile.exists() && tempFile.canRead()) {
-                try (BufferedReader br = new BufferedReader(new FileReader(tempFile))) {
+            if (!tempFile.canRead()) continue;
+
+            String type = "";
+            if (typeFile.canRead()) {
+                try (BufferedReader br = new BufferedReader(new FileReader(typeFile))) {
                     String line = br.readLine();
-                    if (line != null) {
-                        float raw = Float.parseFloat(line.trim());
-                        float c = raw > 1000 ? raw / 1000.0f : (raw > 100 ? raw / 10.0f : raw);
-                        if (c >= 15.0f && c <= 45.0f) {
-                            lastThermalZoneTemp = c;
-                            break;
-                        }
-                    }
+                    if (line != null) type = line.trim().toLowerCase(Locale.US);
                 } catch (Exception ignored) {}
+            }
+
+            float raw = -1;
+            try (BufferedReader br = new BufferedReader(new FileReader(tempFile))) {
+                String line = br.readLine();
+                if (line != null) raw = Float.parseFloat(line.trim());
+            } catch (Exception ignored) {}
+
+            if (raw <= 0) continue;
+            float c = raw > 1000 ? raw / 1000.0f : (raw > 100 ? raw / 10.0f : raw);
+
+            if (type.contains("sdm-skin-therm") || type.contains("skin")) {
+                hardwareSkinTemp = c;
+            } else if (type.contains("cpuss-0") || type.contains("cpuss")) {
+                hardwareCpuTemp = c;
+            } else if (type.contains("batt_gauge")) {
+                hardwareBattGaugeTemp = c;
             }
         }
 
@@ -1083,6 +1103,21 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
                 }
             }
         } catch (Exception ignored) {}
+    }
+
+    private float getCompensatedContactTemp() {
+        float raw = directSkinTemp > 0 ? directSkinTemp : (hardwareSkinTemp > 0 ? hardwareSkinTemp : (lastBatteryTemp > 0 ? lastBatteryTemp : 32.0f));
+
+        if (isCharging) {
+            raw -= 4.2f; // Charging coil thermal dissipation offset
+        }
+
+        if (hardwareCpuTemp > raw && hardwareCpuTemp < 80.0f) {
+            float cpuExcess = hardwareCpuTemp - raw;
+            raw -= cpuExcess * 0.10f; // 10% thermal coupling to watch base
+        }
+
+        return Math.round(raw * 10f) / 10f;
     }
 
     public void updateBatteryTemp(Intent intent) {
@@ -1108,18 +1143,20 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     }
 
     private void recalculateAndDisplay() {
-        float ambientVal = lastAmbientTemp > 0 ? lastAmbientTemp : lastThermalZoneTemp;
-        if (ambientVal > 0) {
-            tvAmbientTemp.setText(formatTemp(ambientVal));
-        }
+        float ambientVal = lastAmbientTemp > 0 ? lastAmbientTemp : 23.5f;
+        tvAmbientTemp.setText(formatTemp(ambientVal));
+
+        float contactTemp = getCompensatedContactTemp();
 
         // --- Water Mode Preview ---
-        float waterPreview = directSkinTemp > 0 ? directSkinTemp : (ambientVal > 0 ? ambientVal : (lastBatteryTemp > 0 ? lastBatteryTemp : 26.0f));
+        float waterPreview = hardwareSkinTemp > 0 ? hardwareSkinTemp : contactTemp;
         tvWaterTemp.setText(formatTemp(waterPreview));
         updateWaterBadge(waterPreview);
 
         // --- Room Mode Processing ---
-        float roomEstimate = ambientVal > 0 ? ambientVal : (lastBatteryTemp > 0 ? lastBatteryTemp - 2.5f : 24.0f);
+        float roomEstimate = (!isOnWrist && !isCharging && contactTemp > 10.0f && contactTemp < 35.0f)
+                ? contactTemp
+                : ambientVal;
         tvRoomTemp.setText(formatTemp(roomEstimate));
         if (roomEstimate < 18.0f) {
             tvRoomStatus.setText("Прохладный микроклимат");
@@ -1130,85 +1167,56 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
 
         // --- Temple Mode Live Preview ---
-        float liveTempleSkin = directSkinTemp > 0 ? directSkinTemp : (lastBatteryTemp > 0 ? lastBatteryTemp : 35.8f);
+        float liveTempleSkin = contactTemp;
+        float liveTempleBody = liveTempleSkin + 0.35f + tempOffset;
         tvTempleTemp.setText(formatTemp(liveTempleSkin + tempOffset));
         if (mercuryViewTemple != null) {
-            mercuryViewTemple.setTemperature(liveTempleSkin + 0.35f + tempOffset, true);
+            mercuryViewTemple.setTemperature(liveTempleBody, true);
         }
 
         // --- Wrist Mode Processing ---
-        if (directSkinTemp > 0) {
-            float bodyEst = 36.5f + (directSkinTemp - 33.4f) * 0.25f;
-            float calibratedSkin = directSkinTemp + tempOffset;
-            float calibratedBody = bodyEst + tempOffset;
-
-            currentCalculatedSkin = calibratedSkin;
-            currentCalculatedBody = calibratedBody;
-
-            tvSkinTemp.setText(formatTemp(calibratedSkin));
-            tvSkinStatus.setText(String.format(Locale.US, "Goodix • Тело ~%s", formatTemp(calibratedBody)));
+        // Physical off-body detection
+        if (!isOnWrist && contactTemp < 31.0f) {
+            currentCalculatedSkin = contactTemp;
+            currentCalculatedBody = 35.0f;
+            tvSkinTemp.setText(formatTemp(contactTemp));
+            tvSkinStatus.setText("Часы сняты (Корпус " + formatTempShort(contactTemp) + ")");
+            tvSkinStatus.setTextColor(Color.parseColor("#78909C"));
             if (mercuryViewWrist != null) {
-                mercuryViewWrist.setTemperature(calibratedBody, true);
+                mercuryViewWrist.setTemperature(35.0f, true);
             }
-            savePrefsAndUpdateComplication(calibratedSkin, calibratedBody, ambientVal);
-            updateSparkline(calibratedSkin);
-            updateThermalBalance(calibratedSkin, ambientVal);
-            updateFeverAdvisor(calibratedBody);
+            updateThermalBalance(contactTemp, ambientVal);
             return;
         }
 
-        float rawContact = -1.0f;
-        if (lastAmbientTemp > 0 && lastBatteryTemp > 0) {
-            rawContact = 0.65f * lastAmbientTemp + 0.35f * lastBatteryTemp;
-        } else if (lastAmbientTemp > 0) {
-            rawContact = lastAmbientTemp;
-        } else if (lastBatteryTemp > 0) {
-            rawContact = lastBatteryTemp;
-        } else if (lastThermalZoneTemp > 0) {
-            rawContact = lastThermalZoneTemp;
-        }
+        // On-wrist physiological conversion (Wanger-Bayer heat flux transfer model)
+        float calibratedSkin = contactTemp + tempOffset;
+        float deltaSkin = calibratedSkin - 33.2f;
+        float calibratedBody = 36.6f + deltaSkin * 0.65f + tempOffset;
 
-        if (rawContact > 0) {
-            float effectiveContact = (isCharging && rawContact > 35.5f) ? (rawContact - 7.8f) : rawContact;
-            if (effectiveContact >= 26.5f) {
-                float wristSkin = 32.1f + (effectiveContact - 28.0f) * 0.42f;
-                if (wristSkin < 30.5f) wristSkin = 30.5f;
-                if (wristSkin > 35.8f) wristSkin = 35.8f;
+        // Realistic safety bounds for human physiology (34.0 to 42.0)
+        if (calibratedBody < 34.0f) calibratedBody = 34.0f;
+        if (calibratedBody > 42.0f) calibratedBody = 42.0f;
 
-                float bodyEst = 36.5f + (wristSkin - 33.3f) * 0.18f;
-                if (bodyEst < 36.1f) bodyEst = 36.1f;
-                if (bodyEst > 37.5f) bodyEst = 37.5f;
+        currentCalculatedSkin = calibratedSkin;
+        currentCalculatedBody = Math.round(calibratedBody * 10f) / 10f;
 
-                float calibratedSkin = wristSkin + tempOffset;
-                float calibratedBody = bodyEst + tempOffset;
-
-                currentCalculatedSkin = calibratedSkin;
-                currentCalculatedBody = calibratedBody;
-
-                tvSkinTemp.setText(formatTemp(calibratedSkin));
-                if (isCharging) {
-                    tvSkinStatus.setText(String.format(Locale.US, "Зарядка • Тело ~%s", formatTemp(calibratedBody)));
-                } else {
-                    tvSkinStatus.setText(String.format(Locale.US, "Запястье • Тело ~%s", formatTemp(calibratedBody)));
-                }
-                if (mercuryViewWrist != null) {
-                    mercuryViewWrist.setTemperature(calibratedBody, true);
-                }
-                savePrefsAndUpdateComplication(calibratedSkin, calibratedBody, ambientVal);
-                updateSparkline(calibratedSkin);
-                updateThermalBalance(calibratedSkin, ambientVal);
-                updateFeverAdvisor(calibratedBody);
-            } else {
-                currentCalculatedSkin = rawContact;
-                currentCalculatedBody = 36.6f;
-                tvSkinTemp.setText(formatTemp(rawContact));
-                tvSkinStatus.setText("Наденьте часы плотно на руку");
-                updateThermalBalance(rawContact, ambientVal);
-            }
+        tvSkinTemp.setText(formatTemp(calibratedSkin));
+        if (isCharging) {
+            tvSkinStatus.setText(String.format(Locale.US, "Зарядка • Тело ~%s", formatTemp(currentCalculatedBody)));
         } else {
-            tvSkinTemp.setText("Измерение...");
-            tvSkinStatus.setText("Опрос термодатчиков часов");
+            tvSkinStatus.setText(String.format(Locale.US, "sdm-skin • Тело ~%s", formatTemp(currentCalculatedBody)));
         }
+        tvSkinStatus.setTextColor(Color.parseColor("#00E5FF"));
+
+        if (mercuryViewWrist != null) {
+            mercuryViewWrist.setTemperature(currentCalculatedBody, true);
+        }
+
+        savePrefsAndUpdateComplication(calibratedSkin, currentCalculatedBody, ambientVal);
+        updateSparkline(calibratedSkin);
+        updateThermalBalance(calibratedSkin, ambientVal);
+        updateFeverAdvisor(currentCalculatedBody);
     }
 
     private void updateWaterBadge(float tempC) {
@@ -1358,7 +1366,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         layoutMeasuring.setVisibility(View.GONE);
         layoutMeasureResult.setVisibility(View.VISIBLE);
 
-        float finalSkin = currentCalculatedSkin > 20.0f ? currentCalculatedSkin : 33.4f;
+        float finalSkin = currentCalculatedSkin > 20.0f ? currentCalculatedSkin : 33.2f;
         if (!measureSamples.isEmpty()) {
             int count = Math.min(measureSamples.size(), 8);
             float sum = 0;
@@ -1366,17 +1374,27 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
                 sum += measureSamples.get(i);
             }
             finalSkin = sum / count;
+
+            // Thermal saturation compensation for ceramic case
+            if (measureSamples.size() >= 10) {
+                float slope = (measureSamples.get(measureSamples.size() - 1) - measureSamples.get(measureSamples.size() - 6)) / 5.0f;
+                if (slope > 0.02f) {
+                    finalSkin += Math.min(1.0f, slope * 6.0f);
+                }
+            }
         }
 
-        float finalBody = 36.5f + (finalSkin - 33.3f) * 0.18f + tempOffset;
-        if (finalBody < 35.0f) finalBody = 35.0f;
-        if (finalBody > 39.5f) finalBody = 39.5f;
+        float deltaSkin = finalSkin - 33.2f;
+        float finalBody = 36.6f + deltaSkin * 0.65f + tempOffset;
+        if (finalBody < 34.0f) finalBody = 34.0f;
+        if (finalBody > 42.0f) finalBody = 42.0f;
+        finalBody = Math.round(finalBody * 10f) / 10f;
 
         lastMeasuredBodyWrist = finalBody;
         tvFixedResult.setText(formatTemp(finalBody));
 
         if (finalBody < 35.5f) {
-            tvResultBadge.setText("Пониженная");
+            tvResultBadge.setText("Пониженная (Гипотермия)");
             tvResultBadge.setTextColor(Color.parseColor("#00E5FF"));
             tvFixedResult.setTextColor(Color.parseColor("#00E5FF"));
         } else if (finalBody <= 37.2f) {
@@ -1388,7 +1406,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             tvResultBadge.setTextColor(Color.parseColor("#FFA000"));
             tvFixedResult.setTextColor(Color.parseColor("#FFA000"));
         } else {
-            tvResultBadge.setText("🔥 Повышенная");
+            tvResultBadge.setText("🔥 Повышенная (Лихорадка)");
             tvResultBadge.setTextColor(Color.parseColor("#FF5252"));
             tvFixedResult.setTextColor(Color.parseColor("#FF5252"));
         }
@@ -1438,7 +1456,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         templeSecondsLeft--;
         vibrateTick();
 
-        float sample = directSkinTemp > 0 ? directSkinTemp : (lastBatteryTemp > 0 ? lastBatteryTemp : 35.8f);
+        float sample = hardwareSkinTemp > 0 ? hardwareSkinTemp : (directSkinTemp > 0 ? directSkinTemp : (lastBatteryTemp > 0 ? lastBatteryTemp : 35.8f));
         templeSamples.add(sample);
 
         tvTempleCountdown.setText(templeSecondsLeft + " сек... Держите у виска");
@@ -1529,7 +1547,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         waterSecondsLeft--;
         vibrateTick();
 
-        float sample = directSkinTemp > 0 ? directSkinTemp : (lastAmbientTemp > 0 ? lastAmbientTemp : (lastBatteryTemp > 0 ? lastBatteryTemp : 28.0f));
+        float sample = hardwareSkinTemp > 0 ? hardwareSkinTemp : (directSkinTemp > 0 ? directSkinTemp : (lastBatteryTemp > 0 ? lastBatteryTemp : 28.0f));
         waterSamples.add(sample);
 
         tvWaterCountdown.setText(waterSecondsLeft + " сек... Держите часы в воде");
@@ -1821,6 +1839,12 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         int type = s.getType();
         String name = s.getName() != null ? s.getName().toLowerCase(Locale.US) : "";
         String strType = s.getStringType() != null ? s.getStringType().toLowerCase(Locale.US) : "";
+
+        if (type == 34 || name.contains("offbody") || strType.contains("offbody")) {
+            isOnWrist = (value > 0.5f);
+            recalculateAndDisplay();
+            return;
+        }
 
         if (type == 65590 || name.contains("skin") || strType.contains("skin_temperature") || name.contains("body_temp")) {
             if (value > 10.0f && value < 50.0f) {

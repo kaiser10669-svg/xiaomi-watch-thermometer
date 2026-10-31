@@ -12,8 +12,8 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:gravity="center_horizontal"
-        android:paddingTop="36dp"
-        android:paddingBottom="48dp"
+        android:paddingTop="34dp"
+        android:paddingBottom="52dp"
         android:paddingLeft="18dp"
         android:paddingRight="18dp">
 
@@ -82,50 +82,81 @@
                 android:gravity="center" />
         </LinearLayout>
 
-        <!-- 3-Mode Selector: Рука / Висок / Воздух -->
+        <!-- 2x2 Ergonomic Mode Selector for Circular Display -->
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="28dp"
-            android:orientation="horizontal"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
             android:background="@drawable/btn_secondary_bg"
-            android:padding="2dp"
+            android:padding="3dp"
             android:layout_marginBottom="10dp">
 
-            <Button
-                android:id="@+id/btnTabWrist"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:background="@drawable/tab_selected_bg"
-                android:text="👤 РУКА"
-                android:textColor="#FFFFFF"
-                android:textSize="9sp"
-                android:textStyle="bold"
-                android:padding="0dp" />
+            <!-- Row 1: Wrist & Temple -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="26dp"
+                android:orientation="horizontal"
+                android:layout_marginBottom="2dp">
 
-            <Button
-                android:id="@+id/btnTabTemple"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:background="@null"
-                android:text="🎯 ВИСОК"
-                android:textColor="@color/text_title"
-                android:textSize="9sp"
-                android:textStyle="bold"
-                android:padding="0dp" />
+                <Button
+                    android:id="@+id/btnTabWrist"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/tab_selected_bg"
+                    android:text="👤 РУКА (30с)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="9sp"
+                    android:textStyle="bold"
+                    android:padding="0dp"
+                    android:layout_marginEnd="2dp" />
 
-            <Button
-                android:id="@+id/btnTabRoom"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:background="@null"
-                android:text="🏠 ВОЗДУХ"
-                android:textColor="@color/text_title"
-                android:textSize="9sp"
-                android:textStyle="bold"
-                android:padding="0dp" />
+                <Button
+                    android:id="@+id/btnTabTemple"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@null"
+                    android:text="🎯 ВИСОК (15с)"
+                    android:textColor="@color/text_title"
+                    android:textSize="9sp"
+                    android:textStyle="bold"
+                    android:padding="0dp"
+                    android:layout_marginStart="2dp" />
+            </LinearLayout>
+
+            <!-- Row 2: Water & Room -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="26dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btnTabWater"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@null"
+                    android:text="🌊 ВОДА (10с)"
+                    android:textColor="@color/text_title"
+                    android:textSize="9sp"
+                    android:textStyle="bold"
+                    android:padding="0dp"
+                    android:layout_marginEnd="2dp" />
+
+                <Button
+                    android:id="@+id/btnTabRoom"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@null"
+                    android:text="🏠 ВОЗДУХ (60с)"
+                    android:textColor="@color/text_title"
+                    android:textSize="9sp"
+                    android:textStyle="bold"
+                    android:padding="0dp"
+                    android:layout_marginStart="2dp" />
+            </LinearLayout>
         </LinearLayout>
 
         <!-- ==================== WRIST MODE CONTAINER ==================== -->
@@ -175,6 +206,13 @@
                     android:textColor="@color/text_title"
                     android:textSize="10sp"
                     android:layout_marginTop="2dp"
+                    android:layout_marginBottom="6dp" />
+
+                <!-- Classic Mercury Thermometer Gauge (Horizontal Glass Tube) -->
+                <com.kaiserdev.watchthermometer.MercuryThermometerView
+                    android:id="@+id/mercuryViewWrist"
+                    android:layout_width="match_parent"
+                    android:layout_height="28dp"
                     android:layout_marginBottom="8dp" />
 
                 <!-- Idle mode: Start Measurement Button -->
@@ -537,6 +575,13 @@
                     android:textColor="@color/text_title"
                     android:textSize="10sp"
                     android:layout_marginTop="2dp"
+                    android:layout_marginBottom="6dp" />
+
+                <!-- Mercury View for Temple Mode -->
+                <com.kaiserdev.watchthermometer.MercuryThermometerView
+                    android:id="@+id/mercuryViewTemple"
+                    android:layout_width="match_parent"
+                    android:layout_height="28dp"
                     android:layout_marginBottom="8dp" />
 
                 <Button
@@ -592,6 +637,126 @@
                         android:padding="4dp"
                         android:layout_marginTop="3dp"
                         android:layout_marginBottom="6dp" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ==================== WATER / BATH MODE CONTAINER (NEW!) ==================== -->
+        <LinearLayout
+            android:id="@+id/layoutWaterMode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:background="@drawable/bg_card"
+                android:paddingTop="12dp"
+                android:paddingBottom="14dp"
+                android:paddingLeft="12dp"
+                android:paddingRight="12dp"
+                android:layout_marginBottom="8dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🌊 ТЕРМОМЕТР ВОДЫ И ВАННЫ"
+                    android:textColor="@color/cyan_temp"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.05"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:id="@+id/tvWaterTemp"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="--.- °C"
+                    android:textColor="@color/text_white"
+                    android:textSize="32sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvWaterBadge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="👶 Идеально для детской ванны"
+                    android:textColor="@color/green_temp"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:id="@+id/tvWaterStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Влагозащита 5 ATM • Погрузите на 5-10 сек"
+                    android:textColor="@color/text_title"
+                    android:textSize="9sp"
+                    android:layout_marginBottom="8dp" />
+
+                <Button
+                    android:id="@+id/btnStartWaterMeasure"
+                    android:layout_width="match_parent"
+                    android:layout_height="34dp"
+                    android:background="@drawable/btn_measure_bg"
+                    android:text="⏱️ ЗАМЕРИТЬ ВОДУ (10 сек)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:textAllCaps="false" />
+
+                <TextView
+                    android:id="@+id/tvWaterCountdown"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="10 сек... Держите часы в воде"
+                    android:textColor="@color/cyan_temp"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="6dp"
+                    android:visibility="gone" />
+
+                <!-- Water Result Layout -->
+                <LinearLayout
+                    android:id="@+id/layoutWaterResult"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:layout_marginTop="6dp"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:id="@+id/tvWaterFixedResult"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="37.2 °C"
+                            android:textColor="@color/cyan_temp"
+                            android:textSize="26sp"
+                            android:textStyle="bold" />
+
+                        <ImageButton
+                            android:id="@+id/btnSpeakWaterResult"
+                            android:layout_width="28dp"
+                            android:layout_height="28dp"
+                            android:background="@drawable/btn_circle_bg"
+                            android:src="@drawable/ic_volume_up"
+                            android:layout_marginStart="8dp"
+                            android:padding="4dp"
+                            android:contentDescription="Озвучить" />
+                    </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
         </LinearLayout>
@@ -669,6 +834,124 @@
             </LinearLayout>
         </LinearLayout>
 
+        <!-- ==================== FEVER ADVISOR & MED TIMER CARD (NEW!) ==================== -->
+        <LinearLayout
+            android:id="@+id/layoutFeverAdvisor"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_card"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
+            android:paddingLeft="12dp"
+            android:paddingRight="12dp"
+            android:layout_marginBottom="8dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="4dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="🩺 СОВЕТНИК ПРИ ТЕМПЕРАТУРЕ"
+                    android:textColor="@color/accent_orange"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.04" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvAdvisorStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="✓ Норма (36.6 °C)"
+                android:textColor="@color/green_temp"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="2dp" />
+
+            <TextView
+                android:id="@+id/tvAdvisorAdvice"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Температура тела в идеальном балансе. Лекарства не требуются."
+                android:textColor="@color/text_white"
+                android:textSize="9sp"
+                android:layout_marginBottom="8dp" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#22FFFFFF"
+                android:layout_marginBottom="8dp" />
+
+            <!-- Medication / Antipyretic Dose Timer -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="💊 ТАЙМЕР ПРИЕМА ЖАРОПОНИЖАЮЩЕГО"
+                android:textColor="@color/text_title"
+                android:textSize="9sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp" />
+
+            <TextView
+                android:id="@+id/tvMedTimerCountdown"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Таймер не активен"
+                android:textColor="@color/cyan_temp"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="6dp" />
+
+            <!-- Pill Timer Buttons -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="26dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btnTimer4h"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/btn_secondary_bg"
+                    android:text="+4ч (Парацетамол)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="8sp"
+                    android:padding="0dp"
+                    android:layout_marginEnd="3dp" />
+
+                <Button
+                    android:id="@+id/btnTimer6h"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/btn_secondary_bg"
+                    android:text="+6ч (Ибупрофен)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="8sp"
+                    android:padding="0dp"
+                    android:layout_marginEnd="3dp" />
+
+                <Button
+                    android:id="@+id/btnTimerReset"
+                    android:layout_width="40dp"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/btn_secondary_bg"
+                    android:text="❌"
+                    android:textColor="#FF5252"
+                    android:textSize="9sp"
+                    android:padding="0dp" />
+            </LinearLayout>
+        </LinearLayout>
+
         <!-- ==================== HISTORY LOG CARD ==================== -->
         <LinearLayout
             android:id="@+id/layoutHistoryCard"
@@ -728,6 +1011,19 @@
                     android:paddingTop="6dp"
                     android:paddingBottom="6dp" />
             </LinearLayout>
+
+            <!-- Doctor Export Button -->
+            <Button
+                android:id="@+id/btnExportReport"
+                android:layout_width="match_parent"
+                android:layout_height="28dp"
+                android:background="@drawable/btn_secondary_bg"
+                android:text="📋 ЭКСПОРТ ОТЧЕТА ДЛЯ ВРАЧА"
+                android:textColor="@color/cyan_temp"
+                android:textSize="9sp"
+                android:textStyle="bold"
+                android:layout_marginTop="8dp"
+                android:padding="0dp" />
         </LinearLayout>
 
         <!-- Hardware Sensors Card -->
@@ -891,7 +1187,7 @@
             android:id="@+id/tvSensorList"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Xiaomi Watch 5 • Wear OS • v2.0.0"
+            android:text="Xiaomi Watch 5 • Wear OS • v3.0.0"
             android:textColor="@color/text_title"
             android:textSize="9sp"
             android:gravity="center" />

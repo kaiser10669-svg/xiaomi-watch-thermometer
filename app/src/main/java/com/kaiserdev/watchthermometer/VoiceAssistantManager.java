@@ -61,8 +61,10 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
                 statusPhrase = "В пределах нормы!";
             } else if (tempC <= 38.0f) {
                 statusPhrase = "Субфебрильная. Будьте внимательны.";
+            } else if (tempC <= 38.5f) {
+                statusPhrase = "Повышенная! Рекомендуется отдых и обильное питьё.";
             } else {
-                statusPhrase = "Внимание! Температура повышенная!";
+                statusPhrase = "Внимание! Лихорадка! Примите жаропонижающее.";
             }
 
             if (decimal == 0) {
@@ -72,10 +74,47 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
             }
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            tts.speak(phrase, TextToSpeech.QUEUE_FLUSH, null, "TEMP_ANNOUNCE");
+        speak(phrase);
+    }
+
+    public void speakWater(float tempC, boolean isFahrenheit) {
+        if (!isReady || isMuted || tts == null) return;
+
+        int whole = (int) tempC;
+        int decimal = Math.round((tempC - whole) * 10f);
+        if (decimal == 10) { whole++; decimal = 0; }
+
+        String advice;
+        if (tempC < 15.0f) {
+            advice = "Ледяная купель для моржевания.";
+        } else if (tempC <= 28.5f) {
+            advice = "Бодрящая вода для плавания.";
+        } else if (tempC <= 35.9f) {
+            advice = "Приятная теплая вода.";
+        } else if (tempC <= 38.5f) {
+            advice = "Идеально для купания ребенка!";
+        } else if (tempC <= 41.5f) {
+            advice = "Горячая расслабляющая ванна.";
         } else {
-            tts.speak(phrase, TextToSpeech.QUEUE_FLUSH, null);
+            advice = "Внимание! Слишком горячо! Опасность ожога!";
+        }
+
+        String phrase;
+        if (decimal == 0) {
+            phrase = String.format(Locale.US, "Температура воды %d градусов. %s", whole, advice);
+        } else {
+            phrase = String.format(Locale.US, "Температура воды %d и %d. %s", whole, decimal, advice);
+        }
+
+        speak(phrase);
+    }
+
+    private void speak(String text) {
+        if (tts == null) return;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "THERMOMETER_ANNOUNCE");
+        } else {
+            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null);
         }
     }
 

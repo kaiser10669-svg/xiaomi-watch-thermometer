@@ -25,6 +25,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.view.Gravity;
@@ -513,6 +514,65 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
                     } else {
                         Toast.makeText(MainActivity.this, "🌡️ Термометр височной артерии", Toast.LENGTH_SHORT).show();
                     }
+                }
+            });
+        }
+
+        if (tvSkinTemp != null) {
+            tvSkinTemp.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    vibrateTick();
+                    if (voiceAssistant != null && currentCalculatedBody > 30.0f) {
+                        voiceAssistant.speakTemperature(currentCalculatedBody, isFahrenheit, true);
+                    }
+                }
+            });
+        }
+
+        if (tvSkinStatus != null) {
+            tvSkinStatus.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    vibrateTick();
+                    if (voiceAssistant != null && currentCalculatedBody > 30.0f) {
+                        voiceAssistant.speakTemperature(currentCalculatedBody, isFahrenheit, true);
+                    }
+                }
+            });
+        }
+
+        if (tvTempleTemp != null) {
+            tvTempleTemp.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    vibrateTick();
+                    float target = lastMeasuredBodyTemple > 30.0f ? lastMeasuredBodyTemple : currentCalculatedBody;
+                    if (voiceAssistant != null && target > 30.0f) {
+                        voiceAssistant.speakTemperature(target, isFahrenheit, true);
+                    }
+                }
+            });
+        }
+
+        if (tvRoomTemp != null) {
+            tvRoomTemp.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    vibrateTick();
+                    if (voiceAssistant != null && lastMeasuredRoom > -50.0f && Math.abs(lastMeasuredRoom - (-1.0f)) > 0.001f) {
+                        voiceAssistant.speakRoom(lastMeasuredRoom, isFahrenheit, true);
+                    }
+                }
+            });
+        }
+
+        if (tvSensorList != null) {
+            tvSensorList.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    vibrateTick();
+                    Toast.makeText(MainActivity.this, "SDM-Skin + PPG Пульс + Батарея\nDual-Flux Clinical v5.5.0", Toast.LENGTH_SHORT).show();
                 }
             });
         }
@@ -1064,7 +1124,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
 
         if (tvSensorList != null) {
-            tvSensorList.setText("Xiaomi Watch 5 • Clinical v5.4.0");
+            tvSensorList.setText("Xiaomi Watch 5 • Clinical v5.5.0");
         }
     }
 
@@ -1165,7 +1225,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         // PPG Heart Rate Vasodilation Compensation:
         // When skin is warm (> 33.5°C) and fresh heart rate is elevated (> 85 bpm), peripheral capillaries dilate
         long nowHr = System.currentTimeMillis();
-        boolean hasFreshHr = (lastHeartRateBpm > 0 && (nowHr - lastHeartRateTimestampMs < 15000));
+        boolean hasFreshHr = (lastHeartRateBpm > 0 && (SystemClock.elapsedRealtime() - lastHeartRateTimestampMs < 15000));
         if (isOnWrist && raw > 33.5f && hasFreshHr && lastHeartRateBpm > 85.0f && lastHeartRateBpm <= 200.0f) {
             float vasoOffset = Math.min(0.40f, (lastHeartRateBpm - 85.0f) * 0.005f);
             raw -= vasoOffset;
@@ -1316,7 +1376,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
         // --- Wrist Mode Processing ---
         long now = System.currentTimeMillis();
-        boolean hasHeartRatePulse = (lastHeartRateBpm >= 40.0f && (now - lastHeartRateTimestampMs < 8000));
+        boolean hasHeartRatePulse = (lastHeartRateBpm >= 40.0f && (SystemClock.elapsedRealtime() - lastHeartRateTimestampMs < 8000));
         boolean reallyOnWrist = !isPlugged && !isCharging && (isOnWrist || hasHeartRatePulse) && (contactTemp >= 16.0f);
         if (!reallyOnWrist) {
             kalmanSkin.reset(-100.0f);
@@ -1573,6 +1633,11 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
     // --- Wrist Measurement (30 seconds) ---
     private void startMeasurement() {
+        if (isPlugged || isCharging) {
+            Toast.makeText(this, "⚠️ Снимите часы с зарядки для замера", Toast.LENGTH_SHORT).show();
+            vibrateShort();
+            return;
+        }
         if (!isOnWrist && directSkinTemp <= 0) {
             Toast.makeText(this, "Пожалуйста, наденьте часы на руку!", Toast.LENGTH_SHORT).show();
             return;
@@ -1757,6 +1822,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     private void cancelMeasurement() {
         setWakeLockActive(false);
         isMeasuring = false;
+        measureSamples.clear();
         uiHandler.removeCallbacks(measureCountdownRunnable);
         layoutMeasuring.setVisibility(View.GONE);
         btnStartMeasure.setVisibility(View.VISIBLE);
@@ -1765,6 +1831,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     private void cancelTempleMeasurement() {
         setWakeLockActive(false);
         isTempleMeasuring = false;
+        templeSamples.clear();
         uiHandler.removeCallbacks(templeCountdownRunnable);
         if (tvTempleCountdown != null) tvTempleCountdown.setVisibility(View.GONE);
         if (btnCancelTempleMeasure != null) btnCancelTempleMeasure.setVisibility(View.GONE);
@@ -1776,6 +1843,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     private void cancelRoomMeasurement() {
         setWakeLockActive(false);
         isRoomMeasuring = false;
+        roomSamples.clear();
         uiHandler.removeCallbacks(roomCountdownRunnable);
         if (tvRoomCountdown != null) tvRoomCountdown.setVisibility(View.GONE);
         if (btnCancelRoomMeasure != null) btnCancelRoomMeasure.setVisibility(View.GONE);
@@ -2203,9 +2271,10 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         try {
             long now = System.currentTimeMillis();
             // Throttle disk writes and IPC broadcast: max once per 60s or on >= 0.2°C shift
-            if (now - lastComplicationBroadcastMs > 60000 || Math.abs(bodyEst - lastBroadcastBody) >= 0.2f) {
-                lastComplicationBroadcastMs = now;
-                lastBroadcastBody = bodyEst;
+            long elapsed = SystemClock.elapsedRealtime();
+            if (elapsed - lastComplicationBroadcastMs > 60000 || Math.abs(bodyEst - lastBroadcastBody) >= 0.2f) {
+                lastComplicationBroadcastMs = elapsed;
+                                lastBroadcastBody = bodyEst;
                 getSharedPreferences(ThermometerComplicationService.PREFS_NAME, Context.MODE_PRIVATE)
                         .edit()
                         .putFloat(ThermometerComplicationService.KEY_SKIN_TEMP, skinTemp)
@@ -2280,8 +2349,10 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         if (mainScrollView != null) {
             mainScrollView.requestFocus();
         }
-        Intent bi = registerReceiver(batteryReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
-        updateBatteryTemp(bi);
+        try {
+            Intent bi = registerReceiver(batteryReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+            updateBatteryTemp(bi);
+        } catch (Throwable ignored) {}
 
         if (sensorManager != null) {
             for (Sensor s : registeredSensors) {
@@ -2421,7 +2492,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             }
             if (value >= 35.0f && value <= 220.0f) {
                 lastHeartRateBpm = value;
-                lastHeartRateTimestampMs = System.currentTimeMillis();
+                lastHeartRateTimestampMs = SystemClock.elapsedRealtime();
                 recalculateAndDisplay();
             }
             return;

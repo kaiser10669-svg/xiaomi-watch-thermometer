@@ -1,5 +1,7 @@
 package com.kaiserdev.watchthermometer;
 
+import android.os.SystemClock;
+
 /**
  * 1D Kalman Filter for Wear OS physiological thermal filtering.
  * Features:
@@ -37,7 +39,7 @@ public class KalmanFilter1D {
             this.x = initialValue;
         }
         this.p = 1.0f;
-        this.lastUpdateMs = System.currentTimeMillis();
+        this.lastUpdateMs = SystemClock.elapsedRealtime();
     }
 
     public synchronized boolean isInitialized() {
@@ -55,7 +57,7 @@ public class KalmanFilter1D {
             return isInitialized() ? x : measurement;
         }
 
-        long now = System.currentTimeMillis();
+        long now = SystemClock.elapsedRealtime();
         float dt = (lastUpdateMs > 0) ? (now - lastUpdateMs) / 1000.0f : 1.5f;
         if (dt < 0.1f) dt = 0.1f;
         if (dt > 10.0f) dt = 10.0f;

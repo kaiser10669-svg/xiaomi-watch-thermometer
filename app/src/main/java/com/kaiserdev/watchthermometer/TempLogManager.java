@@ -29,7 +29,7 @@ public class TempLogManager {
 
         public String getFormattedTime() {
             long diff = System.currentTimeMillis() - timestamp;
-            if (diff < 60000) return "Только что";
+            if (diff < 60000 || diff < 0) return "Только что";
             if (diff < 3600000) return (diff / 60000) + " мин назад";
             if (diff < 86400000) {
                 SimpleDateFormat sdf = new SimpleDateFormat("HH:mm", Locale.getDefault());

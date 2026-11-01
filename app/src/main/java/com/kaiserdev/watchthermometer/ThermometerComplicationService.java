@@ -186,6 +186,7 @@ public class ThermometerComplicationService extends Service {
 
         Intent launchIntent = new Intent(this, MainActivity.class);
         launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        launchIntent.putExtra("from_complication", true);
         int piFlags = PendingIntent.FLAG_UPDATE_CURRENT;
         if (Build.VERSION.SDK_INT >= 31) {
             piFlags |= PendingIntent.FLAG_IMMUTABLE;

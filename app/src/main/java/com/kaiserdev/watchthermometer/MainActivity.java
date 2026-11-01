@@ -328,6 +328,15 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
     private void handleIncomingIntent(Intent intent) {
         if (intent == null) return;
+        if (intent.getBooleanExtra("from_complication", false)) {
+            intent.removeExtra("from_complication");
+            switchMode(0);
+            vibrateTick();
+            if (mainScrollView != null) {
+                mainScrollView.smoothScrollTo(0, 0);
+            }
+        }
+
         if (intent.getBooleanExtra("auto_start_measure", false)) {
             intent.removeExtra("auto_start_measure");
             uiHandler.postDelayed(new Runnable() {
@@ -577,6 +586,40 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             });
         }
 
+        if (tvThermalStatus != null) {
+            tvThermalStatus.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    vibrateTick();
+                    String status = tvThermalStatus.getText().toString();
+                    String desc = tvThermalDesc != null ? tvThermalDesc.getText().toString() : "";
+                    Toast.makeText(MainActivity.this, status + "\n" + desc, Toast.LENGTH_SHORT).show();
+                }
+            });
+        }
+
+        if (tvThermalDesc != null) {
+            tvThermalDesc.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    vibrateTick();
+                    String status = tvThermalStatus != null ? tvThermalStatus.getText().toString() : "";
+                    String desc = tvThermalDesc.getText().toString();
+                    Toast.makeText(MainActivity.this, status + "\n" + desc, Toast.LENGTH_SHORT).show();
+                }
+            });
+        }
+
+        if (tvSensorDetail != null) {
+            tvSensorDetail.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    vibrateTick();
+                    Toast.makeText(MainActivity.this, "🌡️ Данные сенсоров и суточный циркадный ритм", Toast.LENGTH_SHORT).show();
+                }
+            });
+        }
+
         if (tvFixedResult != null) {
             tvFixedResult.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -721,6 +764,10 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         btnSpeakResult.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                if (voiceAssistant != null && !voiceAssistant.isReady()) {
+                    Toast.makeText(MainActivity.this, "Инициализация речевого движка...", Toast.LENGTH_SHORT).show();
+                    return;
+                }
                 if (voiceAssistant != null && lastMeasuredBodyWrist > 30.0f) {
                     voiceAssistant.speakTemperature(lastMeasuredBodyWrist, isFahrenheit, true);
                     vibrateTick();
@@ -1124,7 +1171,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
 
         if (tvSensorList != null) {
-            tvSensorList.setText("Xiaomi Watch 5 • Clinical v5.5.0");
+            tvSensorList.setText("Xiaomi Watch 5 • Clinical v5.6.0");
         }
     }
 

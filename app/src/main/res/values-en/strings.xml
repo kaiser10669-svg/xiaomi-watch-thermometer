@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Thermometer</string>
+    <string name="title_skin_temp">SKIN TEMPERATURE</string>
+    <string name="title_ambient_temp">AMBIENT</string>
+    <string name="title_battery_temp">BATTERY</string>
+    <string name="complication_label">Thermometer</string>
+    <string name="complication_desc">Skin and ambient temperature on watch face</string>
+</resources>

@@ -33,12 +33,38 @@ public class CircadianModel {
     }
 
     /**
-     * Checks if current time is within nocturnal sleep phase (23:00 - 06:00),
+     * Continuous physiological distal vasodilation factor.
+     * Replaces binary step with smooth chronobiological cosine transition:
+     * - Daytime baseline (08:00 - 21:00): 1.0 (no suppression).
+     * - Deep nocturnal rest (01:00 - 05:00): 0.35 (peak peripheral vasodilation suppression).
+     * - Smooth transitions between 21:00 - 01:00 and 05:00 - 08:00 without step artifacts.
+     */
+    public static float getVasodilationFactor(long timestampMs) {
+        float hour = getLocalHourOfDay(timestampMs);
+        if (hour >= 8.0f && hour <= 21.0f) {
+            return 1.0f;
+        }
+        if (hour >= 1.0f && hour <= 5.0f) {
+            return 0.35f;
+        }
+        if (hour > 21.0f) {
+            float progress = (hour - 21.0f) / 4.0f;
+            return 1.0f - 0.65f * (float) (0.5 * (1.0 - Math.cos(Math.PI * progress)));
+        } else if (hour < 1.0f) {
+            float progress = (hour + 3.0f) / 4.0f;
+            return 1.0f - 0.65f * (float) (0.5 * (1.0 - Math.cos(Math.PI * progress)));
+        } else {
+            float progress = (hour - 5.0f) / 3.0f;
+            return 0.35f + 0.65f * (float) (0.5 * (1.0 - Math.cos(Math.PI * progress)));
+        }
+    }
+
+    /**
+     * Checks if current time is within nocturnal sleep phase,
      * where distal vasodilation naturally increases peripheral wrist temperature.
      */
     public static boolean isNightSleepPhase(long timestampMs) {
-        float hour = getLocalHourOfDay(timestampMs);
-        return hour >= 23.0f || hour < 6.0f;
+        return getVasodilationFactor(timestampMs) < 0.70f;
     }
 
     /**

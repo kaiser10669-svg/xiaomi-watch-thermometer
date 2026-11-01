@@ -703,6 +703,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
         vibrateTick();
         updateMedTimerView();
+        Toast.makeText(this, "Таймер отменён", Toast.LENGTH_SHORT).show();
     }
 
     private void updateMedTimerView() {
@@ -886,7 +887,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
 
         if (tvSensorList != null) {
-            tvSensorList.setText("Xiaomi Watch 5 • Clinical v5.0.0");
+            tvSensorList.setText("Xiaomi Watch 5 • Clinical v5.1.0");
         }
     }
 
@@ -1184,9 +1185,9 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
 
         float skinDelta = filteredSkin - 33.0f;
-        // Compensate for nighttime peripheral vasodilation during sleep phase
-        if (CircadianModel.isNightSleepPhase(now) && skinDelta > 0) {
-            skinDelta *= 0.35f;
+        // Continuous chronobiological peripheral vasodilation dampening (replaces binary night step)
+        if (skinDelta > 0) {
+            skinDelta *= CircadianModel.getVasodilationFactor(now);
         }
 
         float skinFactor;
@@ -1270,7 +1271,15 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
 
     private void updateFeverAdvisorOffbody() {
         if (tvAdvisorStatus == null || tvAdvisorAdvice == null) return;
-        if (lastKnownBodyTemp > 30.0f) {
+        if (lastKnownBodyTemp >= 38.5f) {
+            tvAdvisorStatus.setText("⚠️ Сохранен жар: " + formatTempShort(lastKnownBodyTemp));
+            tvAdvisorStatus.setTextColor(Color.parseColor("#FF5252"));
+            tvAdvisorAdvice.setText("Был зафиксирован высокий жар! Следите за самочувствием и примите жаропонижающее при необходимости.");
+        } else if (lastKnownBodyTemp > 37.2f) {
+            tvAdvisorStatus.setText("⚠️ Предыдущий замер: " + formatTempShort(lastKnownBodyTemp));
+            tvAdvisorStatus.setTextColor(Color.parseColor("#FFA000"));
+            tvAdvisorAdvice.setText("Была повышена температура. Наденьте часы для контроля динамики спада.");
+        } else if (lastKnownBodyTemp > 30.0f) {
             tvAdvisorStatus.setText("Предыдущий замер: " + formatTempShort(lastKnownBodyTemp));
             tvAdvisorStatus.setTextColor(Color.parseColor("#9E9E9E"));
             tvAdvisorAdvice.setText("Для обновления советов и свежей температуры наденьте часы на руку.");
@@ -1484,8 +1493,9 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             ambientDelta = Math.max(-0.5f, Math.min(0.5f, rawAmbDelta));
         }
         float skinDelta = finalSkin - 33.0f;
-        if (CircadianModel.isNightSleepPhase(now) && skinDelta > 0) {
-            skinDelta *= 0.35f;
+        // Continuous chronobiological peripheral vasodilation dampening
+        if (skinDelta > 0) {
+            skinDelta *= CircadianModel.getVasodilationFactor(now);
         }
         float skinFactor;
         if (finalSkin > 34.5f) {
@@ -1798,7 +1808,15 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         float rawContact = getCompensatedContactTemp();
         roomSamples.add(rawContact);
 
-        tvRoomCountdown.setText("Замер воздуха: " + roomSecondsLeft + " сек...");
+        String phase;
+        if (roomSecondsLeft > 30) {
+            phase = "Остывание корпуса";
+        } else if (roomSecondsLeft > 10) {
+            phase = "Стабилизация среды";
+        } else {
+            phase = "Фиксация плато";
+        }
+        tvRoomCountdown.setText(String.format(Locale.US, "Воздух: %dс • %s...", roomSecondsLeft, phase));
 
         if (roomSecondsLeft > 0) {
             uiHandler.postDelayed(roomCountdownRunnable, 1000);
@@ -2051,7 +2069,8 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         if (sensorManager != null) {
             for (Sensor s : registeredSensors) {
                 try {
-                    sensorManager.registerListener(this, s, SensorManager.SENSOR_DELAY_UI);
+                    // SENSOR_DELAY_NORMAL (200ms / 5Hz) saves ~75% I2C sensor bus traffic vs UI 60Hz
+                    sensorManager.registerListener(this, s, SensorManager.SENSOR_DELAY_NORMAL);
                 } catch (Throwable ignored) {}
             }
         }

@@ -178,9 +178,9 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
                 int decimal = Math.round((f - whole) * 10f);
                 if (decimal == 10) { whole++; decimal = 0; }
                 if (decimal == 0) {
-                    phrase = String.format(Locale.US, "Температура %d %s по Фаренгейту. %s", whole, getDegreesWord(whole), statusPhrase);
+                    phrase = String.format(Locale.US, "Температура %d %s по Фаренгейту. — %s", whole, getDegreesWord(whole), statusPhrase);
                 } else {
-                    phrase = String.format(Locale.US, "Температура %d и %d по Фаренгейту. %s", whole, decimal, statusPhrase);
+                    phrase = String.format(Locale.US, "Температура %d и %d по Фаренгейту. — %s", whole, decimal, statusPhrase);
                 }
             } else {
                 int whole = (int) tempC;
@@ -188,9 +188,9 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
                 if (decimal == 10) { whole++; decimal = 0; }
 
                 if (decimal == 0) {
-                    phrase = String.format(Locale.US, "Температура %d %s ровно. %s", whole, getDegreesWord(whole), statusPhrase);
+                    phrase = String.format(Locale.US, "Температура %d %s ровно. — %s", whole, getDegreesWord(whole), statusPhrase);
                 } else {
-                    phrase = String.format(Locale.US, "Температура %d и %d. %s", whole, decimal, statusPhrase);
+                    phrase = String.format(Locale.US, "Температура %d и %d. — %s", whole, decimal, statusPhrase);
                 }
             }
         } else {
@@ -209,9 +209,9 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
 
             if (isFahrenheit) {
                 float f = tempC * 1.8f + 32f;
-                phrase = String.format(Locale.US, "Body temperature %.1f degrees Fahrenheit. %s", f, enStatus);
+                phrase = String.format(Locale.US, "Body temperature %.1f degrees Fahrenheit. — %s", f, enStatus);
             } else {
-                phrase = String.format(Locale.US, "Body temperature %.1f degrees Celsius. %s", tempC, enStatus);
+                phrase = String.format(Locale.US, "Body temperature %.1f degrees Celsius. — %s", tempC, enStatus);
             }
         }
 
@@ -243,9 +243,9 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
                 int decimal = Math.round((f - whole) * 10f);
                 if (decimal == 10) { whole++; decimal = 0; }
                 if (decimal == 0) {
-                    phrase = String.format(Locale.US, "Температура воздуха %d %s по Фаренгейту. %s", whole, getDegreesWord(whole), advice);
+                    phrase = String.format(Locale.US, "Температура воздуха %d %s по Фаренгейту. — %s", whole, getDegreesWord(whole), advice);
                 } else {
-                    phrase = String.format(Locale.US, "Температура воздуха %d и %d по Фаренгейту. %s", whole, decimal, advice);
+                    phrase = String.format(Locale.US, "Температура воздуха %d и %d по Фаренгейту. — %s", whole, decimal, advice);
                 }
             } else {
                 int whole = (int) tempC;
@@ -253,9 +253,9 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
                 if (decimal == 10) { whole++; decimal = 0; }
 
                 if (decimal == 0) {
-                    phrase = String.format(Locale.US, "Температура воздуха %d %s. %s", whole, getDegreesWord(whole), advice);
+                    phrase = String.format(Locale.US, "Температура воздуха %d %s. — %s", whole, getDegreesWord(whole), advice);
                 } else {
-                    phrase = String.format(Locale.US, "Температура воздуха %d и %d. %s", whole, decimal, advice);
+                    phrase = String.format(Locale.US, "Температура воздуха %d и %d. — %s", whole, decimal, advice);
                 }
             }
         } else {
@@ -270,9 +270,9 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
 
             if (isFahrenheit) {
                 float f = tempC * 1.8f + 32f;
-                phrase = String.format(Locale.US, "Room temperature %.1f degrees Fahrenheit. %s", f, enAdvice);
+                phrase = String.format(Locale.US, "Room temperature %.1f degrees Fahrenheit. — %s", f, enAdvice);
             } else {
-                phrase = String.format(Locale.US, "Room temperature %.1f degrees Celsius. %s", tempC, enAdvice);
+                phrase = String.format(Locale.US, "Room temperature %.1f degrees Celsius. — %s", tempC, enAdvice);
             }
         }
 

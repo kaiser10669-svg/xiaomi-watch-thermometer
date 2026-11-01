@@ -574,6 +574,44 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             });
         }
 
+        if (tvMedTimerCountdown != null) {
+            tvMedTimerCountdown.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    vibrateTick();
+                    long target = getSharedPreferences(ThermometerComplicationService.PREFS_NAME, Context.MODE_PRIVATE)
+                            .getLong(PREF_MED_TIMER_TARGET, 0);
+                    if (target > 0) {
+                        long diff = target - System.currentTimeMillis();
+                        if (diff <= 0) {
+                            resetMedTimer();
+                            Toast.makeText(MainActivity.this, "✓ Приём лекарства подтверждён", Toast.LENGTH_SHORT).show();
+                        } else {
+                            long mins = (diff / 60000) % 60;
+                            long hours = diff / 3600000;
+                            Toast.makeText(MainActivity.this, String.format(Locale.US, "💊 До приёма: %dч %dмин", hours, mins), Toast.LENGTH_SHORT).show();
+                        }
+                    } else {
+                        Toast.makeText(MainActivity.this, "💊 Нажмите 4ч или 6ч для запуска таймера", Toast.LENGTH_SHORT).show();
+                    }
+                }
+            });
+        }
+
+        View.OnClickListener advisorClickListener = new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                vibrateTick();
+                if (tvAdvisorAdvice != null && voiceAssistant != null) {
+                    String status = tvAdvisorStatus != null ? tvAdvisorStatus.getText().toString() : "";
+                    String advice = tvAdvisorAdvice.getText().toString();
+                    voiceAssistant.speakPhrase(status + ". " + advice, status + ". " + advice);
+                }
+            }
+        };
+        if (tvAdvisorStatus != null) tvAdvisorStatus.setOnClickListener(advisorClickListener);
+        if (tvAdvisorAdvice != null) tvAdvisorAdvice.setOnClickListener(advisorClickListener);
+
         btnUnitToggle.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -719,6 +757,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
                                 }
                                 updateHistoryView();
                                 updateSparklineStats();
+                                recalculateAndDisplay();
                                 vibrateTick();
                             }
                         })
@@ -730,6 +769,11 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         btnExportReport.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                if (TempLogManager.getHistory(MainActivity.this).isEmpty()) {
+                    Toast.makeText(MainActivity.this, "Журнал пуст. Сделайте первый замер", Toast.LENGTH_SHORT).show();
+                    vibrateShort();
+                    return;
+                }
                 vibrateDouble();
                 showClinicalReportDialog();
             }
@@ -1020,7 +1064,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
 
         if (tvSensorList != null) {
-            tvSensorList.setText("Xiaomi Watch 5 • Clinical v5.3.0");
+            tvSensorList.setText("Xiaomi Watch 5 • Clinical v5.4.0");
         }
     }
 
@@ -2046,6 +2090,23 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
                         vibrateTick();
                     }
                 } catch (Throwable ignored) {}
+            }
+        });
+        builder.setNegativeButton("Отправить", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                try {
+                    Intent sendIntent = new Intent(Intent.ACTION_SEND);
+                    sendIntent.setType("text/plain");
+                    sendIntent.putExtra(Intent.EXTRA_SUBJECT, "Клиническая сводка температуры (Xiaomi Watch 5)");
+                    sendIntent.putExtra(Intent.EXTRA_TEXT, report.formattedReport);
+                    Intent chooser = Intent.createChooser(sendIntent, "Отправить сводку");
+                    chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(chooser);
+                    vibrateTick();
+                } catch (Throwable t) {
+                    Toast.makeText(MainActivity.this, "Не удалось открыть отправку", Toast.LENGTH_SHORT).show();
+                }
             }
         });
         clinicalDialog = builder.create();

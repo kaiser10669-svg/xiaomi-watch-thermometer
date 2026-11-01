@@ -553,6 +553,27 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             });
         }
 
+        if (tvAmbientTemp != null) {
+            tvAmbientTemp.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    vibrateTick();
+                    switchMode(2);
+                }
+            });
+        }
+
+        if (tvBatteryTemp != null) {
+            tvBatteryTemp.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    vibrateTick();
+                    String state = (isPlugged || isCharging) ? "Зарядка" : (lastBatteryTemp >= 40.0f ? "Перегрев" : "Норма");
+                    Toast.makeText(MainActivity.this, String.format(Locale.getDefault(), "🔋 Батарея: %s (%s)", formatTemp(lastBatteryTemp), state), Toast.LENGTH_SHORT).show();
+                }
+            });
+        }
+
         btnUnitToggle.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -954,7 +975,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     }
 
     private String formatTemp(float celsius) {
-        if (celsius <= 0) return "--.-";
+        if (Float.isNaN(celsius) || Float.isInfinite(celsius) || Math.abs(celsius - (-1.0f)) < 0.001f) return "--.-";
         if (isFahrenheit) {
             float f = celsius * 1.8f + 32f;
             return String.format(Locale.US, "%.1f °F", f);
@@ -964,7 +985,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     }
 
     private String formatTempShort(float celsius) {
-        if (celsius <= 0) return "--.-°";
+        if (Float.isNaN(celsius) || Float.isInfinite(celsius) || Math.abs(celsius - (-1.0f)) < 0.001f) return "--.-°";
         if (isFahrenheit) {
             float f = celsius * 1.8f + 32f;
             return String.format(Locale.US, "%.1f°", f);
@@ -999,7 +1020,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
 
         if (tvSensorList != null) {
-            tvSensorList.setText("Xiaomi Watch 5 • Clinical v5.2.0");
+            tvSensorList.setText("Xiaomi Watch 5 • Clinical v5.3.0");
         }
     }
 
@@ -2253,14 +2274,46 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
     }
 
     @Override
+    public void onBackPressed() {
+        if (isMeasuring) {
+            cancelMeasurement();
+            vibrateTick();
+            Toast.makeText(this, "Замер отменён", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (isTempleMeasuring) {
+            cancelTempleMeasurement();
+            vibrateTick();
+            Toast.makeText(this, "Замер на виске отменён", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (isRoomMeasuring) {
+            cancelRoomMeasurement();
+            vibrateTick();
+            Toast.makeText(this, "Замер воздуха отменён", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (currentMode != 0) {
+            switchMode(0);
+            return;
+        }
+        super.onBackPressed();
+    }
+
+    @Override
     protected void onDestroy() {
         uiHandler.removeCallbacksAndMessages(null);
         super.onDestroy();
         setWakeLockActive(false);
+        if (clinicalDialog != null && clinicalDialog.isShowing()) {
+            try {
+                clinicalDialog.dismiss();
+            } catch (Throwable ignored) {}
+            clinicalDialog = null;
+        }
         try {
             unregisterReceiver(batteryReceiver);
         } catch (Exception ignored) {}
-        // Keep clinicalDialog visible across brief screen dimming/ambient transitions
         if (ioExecutor != null && !ioExecutor.isShutdown()) {
             ioExecutor.shutdownNow();
         }

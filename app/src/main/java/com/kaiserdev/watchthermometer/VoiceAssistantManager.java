@@ -244,23 +244,29 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
 
             if (isFahrenheit) {
                 float f = tempC * 1.8f + 32f;
-                int whole = (int) f;
-                int decimal = Math.round((f - whole) * 10f);
+                boolean isNegative = f < 0;
+                float absF = Math.abs(f);
+                int whole = (int) absF;
+                int decimal = Math.round((absF - whole) * 10f);
                 if (decimal == 10) { whole++; decimal = 0; }
+                String sign = isNegative ? "минус " : "";
                 if (decimal == 0) {
-                    phrase = String.format(Locale.US, "Температура воздуха %d %s по Фаренгейту. — %s", whole, getDegreesWord(whole), advice);
+                    phrase = String.format(Locale.US, "Температура воздуха %s%d %s по Фаренгейту. — %s", sign, whole, getDegreesWord(whole), advice);
                 } else {
-                    phrase = String.format(Locale.US, "Температура воздуха %d и %d по Фаренгейту. — %s", whole, decimal, advice);
+                    phrase = String.format(Locale.US, "Температура воздуха %s%d и %d по Фаренгейту. — %s", sign, whole, decimal, advice);
                 }
             } else {
-                int whole = (int) tempC;
-                int decimal = Math.round((tempC - whole) * 10f);
+                boolean isNegative = tempC < 0;
+                float absC = Math.abs(tempC);
+                int whole = (int) absC;
+                int decimal = Math.round((absC - whole) * 10f);
                 if (decimal == 10) { whole++; decimal = 0; }
+                String sign = isNegative ? "минус " : "";
 
                 if (decimal == 0) {
-                    phrase = String.format(Locale.US, "Температура воздуха %d %s. — %s", whole, getDegreesWord(whole), advice);
+                    phrase = String.format(Locale.US, "Температура воздуха %s%d %s. — %s", sign, whole, getDegreesWord(whole), advice);
                 } else {
-                    phrase = String.format(Locale.US, "Температура воздуха %d и %d. — %s", whole, decimal, advice);
+                    phrase = String.format(Locale.US, "Температура воздуха %s%d и %d. — %s", sign, whole, decimal, advice);
                 }
             }
         } else {

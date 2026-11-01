@@ -159,10 +159,15 @@ public class MedicationAlarmReceiver extends BroadcastReceiver {
                   .setOngoing(false);
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
+                    Intent measureIntent = new Intent(context, MainActivity.class);
+                    measureIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                    measureIntent.putExtra("auto_start_measure", true);
+                    PendingIntent measurePi = PendingIntent.getActivity(context, 1002, measureIntent, flags);
+
                     Notification.Action action = new Notification.Action.Builder(
                             R.drawable.ic_complication_temp,
                             "Замерить",
-                            contentIntent
+                            measurePi
                     ).build();
                     nb.addAction(action);
                 }

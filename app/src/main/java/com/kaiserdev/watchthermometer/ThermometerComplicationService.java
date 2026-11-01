@@ -128,8 +128,13 @@ public class ThermometerComplicationService extends Service {
             float directZone = readDirectSysfsSkinTemp();
             if (directZone >= 20.0f && directZone <= 45.0f) {
                 skinTemp = directZone;
-                float base = CircadianModel.getBaseline(System.currentTimeMillis());
-                bodyEst = base + (skinTemp - 33.0f) * 0.45f + tempOffset;
+                long nowMs = System.currentTimeMillis();
+                float base = CircadianModel.getBaseline(nowMs);
+                float skinDelta = skinTemp - 33.0f;
+                if (skinDelta > 0) {
+                    skinDelta *= CircadianModel.getVasodilationFactor(nowMs);
+                }
+                bodyEst = base + (skinDelta * 0.45f) + tempOffset;
             } else {
                 try {
                     Intent bi = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
@@ -148,8 +153,13 @@ public class ThermometerComplicationService extends Service {
                                     skinTemp = 32.1f + (batteryC - 28.0f) * 0.42f;
                                     if (skinTemp < 30.5f) skinTemp = 30.5f;
                                     if (skinTemp > 35.8f) skinTemp = 35.8f;
-                                    float base = CircadianModel.getBaseline(System.currentTimeMillis());
-                                    bodyEst = base + (skinTemp - 33.0f) * 0.42f + tempOffset;
+                                    long nowMs = System.currentTimeMillis();
+                                    float base = CircadianModel.getBaseline(nowMs);
+                                    float skinDelta = skinTemp - 33.0f;
+                                    if (skinDelta > 0) {
+                                        skinDelta *= CircadianModel.getVasodilationFactor(nowMs);
+                                    }
+                                    bodyEst = base + (skinDelta * 0.42f) + tempOffset;
                                 } else {
                                     skinTemp = batteryC;
                                     bodyEst = CircadianModel.getBaseline(System.currentTimeMillis()) + tempOffset;

@@ -222,6 +222,11 @@ public class VoiceAssistantManager implements TextToSpeech.OnInitListener {
         speakRoom(tempC, isFahrenheit, false);
     }
 
+    public void speakPhrase(String ruText, String enText) {
+        if (tts == null || !isReady || isMuted) return;
+        speak(isRussianLocale() ? ruText : enText);
+    }
+
     public void speakRoom(float tempC, boolean isFahrenheit, boolean force) {
         if (!isReady || (!force && isMuted) || tts == null) return;
 

@@ -314,6 +314,35 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         updateHistoryView();
         updateMedTimerView();
         recalculateAndDisplay();
+
+        handleIncomingIntent(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleIncomingIntent(intent);
+    }
+
+    private void handleIncomingIntent(Intent intent) {
+        if (intent == null) return;
+        if (intent.getBooleanExtra("auto_start_measure", false)) {
+            intent.removeExtra("auto_start_measure");
+            uiHandler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    if (isFinishing() || (Build.VERSION.SDK_INT >= 17 && isDestroyed())) return;
+                    switchMode(0);
+                    if (isOnWrist && !isMeasuring && !isTempleMeasuring && !isRoomMeasuring) {
+                        Toast.makeText(MainActivity.this, "⏱️ Запуск замера по напоминанию", Toast.LENGTH_SHORT).show();
+                        startMeasurement();
+                    } else if (!isOnWrist) {
+                        Toast.makeText(MainActivity.this, "⚠️ Для замера наденьте часы на руку", Toast.LENGTH_SHORT).show();
+                    }
+                }
+            }, 350);
+        }
     }
 
     private void setWakeLockActive(boolean active) {
@@ -440,6 +469,89 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
                 }
             }
         });
+
+        if (sparklineView != null) {
+            sparklineView.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    vibrateTick();
+                    SparklineView.Stats stats = sparklineView.getStats();
+                    if (stats.count > 0) {
+                        String unit = isFahrenheit ? "°F" : "°C";
+                        float minD = isFahrenheit ? (stats.min * 1.8f + 32f) : stats.min;
+                        float maxD = isFahrenheit ? (stats.max * 1.8f + 32f) : stats.max;
+                        float avgD = isFahrenheit ? (stats.avg * 1.8f + 32f) : stats.avg;
+                        Toast.makeText(MainActivity.this, String.format(Locale.US, "📈 График (%d точек): Мин: %.1f%s  Макс: %.1f%s  Ср: %.1f%s", stats.count, minD, unit, maxD, unit, avgD, unit), Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(MainActivity.this, "📈 График накапливает данные...", Toast.LENGTH_SHORT).show();
+                    }
+                }
+            });
+        }
+
+        if (mercuryViewWrist != null) {
+            mercuryViewWrist.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    vibrateTick();
+                    if (voiceAssistant != null && lastKnownBodyTemp > 30.0f) {
+                        voiceAssistant.speakTemperature(lastKnownBodyTemp, isFahrenheit, true);
+                    } else {
+                        Toast.makeText(MainActivity.this, "🌡️ Термометр тела", Toast.LENGTH_SHORT).show();
+                    }
+                }
+            });
+        }
+
+        if (mercuryViewTemple != null) {
+            mercuryViewTemple.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    vibrateTick();
+                    if (voiceAssistant != null && lastMeasuredBodyTemple > 30.0f) {
+                        voiceAssistant.speakTemperature(lastMeasuredBodyTemple, isFahrenheit, true);
+                    } else {
+                        Toast.makeText(MainActivity.this, "🌡️ Термометр височной артерии", Toast.LENGTH_SHORT).show();
+                    }
+                }
+            });
+        }
+
+        if (tvFixedResult != null) {
+            tvFixedResult.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    if (voiceAssistant != null && lastMeasuredBodyWrist > 30.0f) {
+                        voiceAssistant.speakTemperature(lastMeasuredBodyWrist, isFahrenheit, true);
+                        vibrateTick();
+                    }
+                }
+            });
+        }
+
+        if (tvTempleFixedResult != null) {
+            tvTempleFixedResult.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    if (voiceAssistant != null && lastMeasuredBodyTemple > 30.0f) {
+                        voiceAssistant.speakTemperature(lastMeasuredBodyTemple, isFahrenheit, true);
+                        vibrateTick();
+                    }
+                }
+            });
+        }
+
+        if (tvRoomFixedResult != null) {
+            tvRoomFixedResult.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    if (voiceAssistant != null && lastMeasuredRoom > 0) {
+                        voiceAssistant.speakRoom(lastMeasuredRoom, isFahrenheit, true);
+                        vibrateTick();
+                    }
+                }
+            });
+        }
 
         btnUnitToggle.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -887,7 +999,7 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
         }
 
         if (tvSensorList != null) {
-            tvSensorList.setText("Xiaomi Watch 5 • Clinical v5.1.0");
+            tvSensorList.setText("Xiaomi Watch 5 • Clinical v5.2.0");
         }
     }
 
@@ -1698,6 +1810,9 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
             btnStartTempleMeasure.setVisibility(View.VISIBLE);
             btnStartTempleMeasure.setText("⏱️ ПОВТОРИТЬ ЗАМЕР НА ВИСКЕ");
             vibrateShort();
+            if (voiceAssistant != null) {
+                voiceAssistant.speakPhrase("Слабый контакт с виском. Прижмите плотнее и повторите замер.", "Insufficient contact. Press firmly to temple and retry.");
+            }
             return;
         }
 
@@ -1975,6 +2090,26 @@ public class MainActivity extends Activity implements SensorEventListener, Runna
                 tvRight.setTextColor(Color.parseColor("#00E676"));
             }
             tvRight.setTextSize(10f);
+
+            final TempLogManager.Entry entry = e;
+            row.setClickable(true);
+            row.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    vibrateTick();
+                    String modeName = entry.getModeLabel();
+                    String bTemp = formatTemp(entry.tempBody);
+                    String sTemp = formatTemp(entry.tempSkin);
+                    Toast.makeText(MainActivity.this, String.format(Locale.getDefault(), "[%s] Тело: %s • Кожа: %s", modeName, bTemp, sTemp), Toast.LENGTH_SHORT).show();
+                    if (voiceAssistant != null && !voiceAssistant.isMuted()) {
+                        if (entry.mode == 2) {
+                            voiceAssistant.speakRoom(entry.tempBody, isFahrenheit, true);
+                        } else {
+                            voiceAssistant.speakTemperature(entry.tempBody, isFahrenheit, true);
+                        }
+                    }
+                }
+            });
 
             row.addView(tvLeft);
             row.addView(tvRight);
